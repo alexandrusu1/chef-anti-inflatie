@@ -1,0 +1,15 @@
+[Unit]
+Description=Chef Anti-Inflatie Frontend
+After=network.target chef-backend.service
+
+[Service]
+Type=simple
+User=arch
+WorkingDirectory=/home/arch/IOferta/frontend
+Environment="PATH=/home/arch/.nvm/versions/node/v20.18.1/bin:/usr/bin"
+ExecStart=/home/arch/.nvm/versions/node/v20.18.1/bin/npm run start
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
