@@ -42,7 +42,7 @@ interface DashboardData {
   }
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http:
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null)
