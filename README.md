@@ -1,53 +1,28 @@
 # Chef Anti-Inflație
 
-Find supermarket deals and generate budget recipes with AI.
+Aplicație web care te ajută să gătești mai ieftin folosind produsele la ofertă din supermarketuri.
 
-## Quick Start
+## Ce face?
 
-**Local Development:**
-```bash
-git clone https://github.com/alexandrusu1/chef-anti-inflatie.git
-cd chef-anti-inflatie
+- Scanează automat ofertele reale din Lidl România
+- Generează rețete personalizate folosind inteligență artificială
+- Calculează costul fiecărei rețete și economiile posibile
+- Te ajută să planifici mesele în funcție de buget
 
-# Backend
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python main.py
+## Cum funcționează?
 
-# Frontend (new terminal)
-cd frontend
-npm install
-npm run dev
-```
+1. **Verificăm ofertele** - Aplicația colectează zilnic prețurile reduse din magazine
+2. **Selectezi produsele** - Alegi ce vrei să cumperi și vezi instant cât economisești
+3. **Primești rețete** - AI-ul generează rețete delicioase din exact produsele selectate
 
-Visit: http://localhost:3000
+## Magazine disponibile
 
-**With Docker:**
-```bash
-docker-compose up
-```
+- Lidl România (activ)
+- Kaufland, Carrefour, Mega Image, Penny (în curând)
 
-## Tech Stack
+---
 
-- **Backend:** FastAPI + Python 3.13 + SQLite
-- **Frontend:** Next.js + React + TypeScript + Tailwind CSS
-- **Infrastructure:** Docker + Docker Compose
-
-## Features
-
-- Auto scraping from supermarkets (Lidl, Kaufland, Profi)
-- AI recipe generation using GitHub Models
-- Savings calculation
-- Scheduled updates (6 AM & 12 PM daily)
-
-## API Endpoints
-
-- `GET /` - Health check
-- `GET /api/offers` - Get all offers
-- `GET /api/recipes` - Generate recipes from offers
-- `GET /api/dashboard` - Full dashboard data
+Gătește inteligent, economisește mult!
 - `POST /api/refresh` - Trigger manual scrape
 
 API Docs: http://localhost:8000/docs
