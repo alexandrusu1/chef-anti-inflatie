@@ -113,83 +113,126 @@ def get_placeholder_image(category: str) -> str:
     return images.get(category, images["Altele"])
 
 
-async def scrape_lidl_api() -> List[Dict]:
-    """Scrape Lidl using their internal API"""
-    offers = []
+async def scrape_lidl_ro() -> List[Dict]:
+    """Scrape Lidl Romania from official website - lidl.ro
     
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "application/json, text/plain, */*",
-                "Accept-Language": "ro-RO,ro;q=0.9",
-                "Referer": "https://www.lidl.ro/"
-            }
-            
-            response = await client.get(
-                "https://www.lidl.ro/c/oferte-saptamanale/s10010953",
-                headers=headers
-            )
-            
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, 'html.parser')
-                products = soup.select('[data-grid-box], .product-grid-box, .lidl-m-product-grid-box')
+    Extracts product data from data-grid-data JSON attributes in the HTML.
+    """
+    offers = []
+    seen_products = set()
+    
+    lidl_pages = [
+        "https://www.lidl.ro/c/oferte-de-luni/a10084517",
+        "https://www.lidl.ro/c/piata-lidl-ia-ceva-din-piata/a10084750",
+        "https://www.lidl.ro/c/delicii-de-post/a10084518",
+        "https://www.lidl.ro/c/deluxe/a10084541",
+        "https://www.lidl.ro/c/oferte-de-joi/a10084738",
+        "https://www.lidl.ro/c/o-dieta-bogata-in-peste/a10084743",
+        "https://www.lidl.ro/c/cheama-ti-prietenii-la-bere/a10084520",
+        "https://www.lidl.ro/c/savoare-de-momente-care-stii-ca-merita/a10084519",
+    ]
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "ro-RO,ro;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Cache-Control": "max-age=0",
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+        for page_url in lidl_pages:
+            try:
+                print(f"  Scraping: {page_url}")
+                response = await client.get(page_url, headers=headers)
                 
-                for product in products[:50]:
+                if response.status_code != 200:
+                    print(f"    Status {response.status_code}")
+                    continue
+                
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                products_found = soup.find_all(attrs={'data-grid-data': True})
+                
+                for el in products_found:
                     try:
-                        name_el = product.select_one('.lidl-m-pricebox__title, .product-grid-box__title, h3, h2')
-                        if not name_el:
+                        grid_data_str = el.get('data-grid-data', '')
+                        if not grid_data_str:
                             continue
-                        name = name_el.get_text(strip=True)
+                        
+                        data = json.loads(grid_data_str)
+                        
+                        name = data.get('fullTitle') or data.get('title', '')
                         if not name or len(name) < 3:
                             continue
                         
-                        price_el = product.select_one('.lidl-m-pricebox__price, .pricebox__price, .price')
-                        old_price_el = product.select_one('.lidl-m-pricebox__price--old, .pricebox__price--old, s, del')
+                        product_id = data.get('productId', '')
+                        if product_id in seen_products:
+                            continue
+                        seen_products.add(product_id)
                         
-                        if not price_el:
+                        price_data = data.get('price', {})
+                        if not price_data:
                             continue
                         
-                        new_price = parse_price(price_el.get_text())
+                        new_price = price_data.get('price', 0)
                         if not new_price or new_price <= 0:
                             continue
                         
-                        old_price = None
-                        if old_price_el:
-                            old_price = parse_price(old_price_el.get_text())
+                        old_price = price_data.get('oldPrice', 0)
+                        discount_data = price_data.get('discount', {})
                         
-                        if not old_price:
-                            old_price = round(new_price * 1.25, 2)
+                        if not old_price or old_price <= 0:
+                            old_price = discount_data.get('deletedPrice', 0)
                         
-                        if old_price <= new_price:
-                            continue
+                        if not old_price or old_price <= new_price:
+                            percentage = discount_data.get('percentageDiscount', 0)
+                            if percentage > 0:
+                                old_price = round(new_price / (1 - percentage/100), 2)
+                            else:
+                                old_price = round(new_price * 1.1, 2)
                         
-                        img_el = product.select_one('img')
-                        img_url = ""
-                        if img_el:
-                            img_url = img_el.get('src') or img_el.get('data-src') or ""
+                        image_url = data.get('image', '')
+                        lidl_category = data.get('category', 'Food')
                         
                         category = get_category(name)
-                        if not img_url or 'placeholder' in img_url.lower() or not img_url.startswith('http'):
-                            img_url = get_placeholder_image(category)
+                        
+                        if not image_url or not image_url.startswith('http'):
+                            image_url = get_placeholder_image(category)
+                        
+                        packaging = price_data.get('packaging', {}).get('text', '')
+                        if packaging:
+                            name = f"{name} ({packaging})"
                         
                         valid_until = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+                        discount_percentage = calculate_discount(old_price, new_price)
                         
-                        offers.append({
-                            "name": name,
-                            "old_price": old_price,
-                            "new_price": new_price,
+                        offer = {
+                            "name": name[:100],
+                            "old_price": round(old_price, 2),
+                            "new_price": round(new_price, 2),
                             "store": "Lidl",
                             "category": category,
-                            "image_url": img_url,
-                            "valid_until": valid_until
-                        })
+                            "image_url": image_url,
+                            "valid_until": valid_until,
+                            "discount_percentage": discount_percentage
+                        }
+                        
+                        offers.append(offer)
+                        
+                    except json.JSONDecodeError:
+                        continue
                     except Exception as e:
                         continue
-                        
-    except Exception as e:
-        print(f"Eroare scraping Lidl API: {e}")
+                
+                await asyncio.sleep(0.3)
+                
+            except Exception as e:
+                print(f"    Eroare pagina {page_url}: {e}")
+                continue
     
+    print(f"  Total Lidl: {len(offers)} oferte extrase")
     return offers
 
 
@@ -396,7 +439,7 @@ async def run_full_scrape() -> List[Dict]:
     all_offers = []
     
     sources = [
-        ("Lidl", scrape_lidl_api),
+        ("Lidl", scrape_lidl_ro),
         ("Kaufland", scrape_kaufland_api),
     ]
     
