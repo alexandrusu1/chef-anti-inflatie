@@ -57,7 +57,6 @@ interface DashboardData {
   }
 }
 
-// Imagini culinare diverse pentru rețete
 const RECIPE_IMAGES = [
   'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600',
   'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=600',
@@ -130,7 +129,6 @@ export default function Home() {
     )
   }
 
-  // Calculează totalul produselor selectate
   const selectedTotal = useMemo(() => {
     if (!data?.offers) return { count: 0, total: 0, savings: 0 }
     const selected = data.offers.filter(o => selectedProducts.includes(o.id))
@@ -141,7 +139,6 @@ export default function Home() {
     }
   }, [data?.offers, selectedProducts])
 
-  // Filtrare oferte pe categorii
   const filteredOffers = useMemo(() => {
     if (!data?.offers) return []
     if (categoryFilter === 'all') return data.offers
@@ -158,7 +155,6 @@ export default function Home() {
     return `${ing.name} - ${ing.quantity}`
   }
 
-  // Funcție pentru a obține o imagine diferită pentru fiecare rețetă
   const getRecipeImage = (recipe: Recipe, index: number) => {
     return RECIPE_IMAGES[index % RECIPE_IMAGES.length]
   }
@@ -198,7 +194,6 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      {/* Header Modern */}
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -229,7 +224,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Navigation */}
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex gap-1">
@@ -274,10 +268,8 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* HOME VIEW */}
       {activeView === 'home' && (
         <div className="max-w-7xl mx-auto px-4 py-8">
-          {/* Hero Section - Descriere profesională */}
           <section className="mb-12">
             <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-3xl p-8 md:p-12 text-white relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
@@ -318,7 +310,6 @@ export default function Home() {
             </div>
           </section>
 
-          {/* Cum funcționează */}
           <section className="mb-12">
             <h3 className="text-xl font-semibold text-slate-800 mb-6 text-center">Cum funcționează</h3>
             <div className="grid md:grid-cols-3 gap-6">
@@ -346,7 +337,6 @@ export default function Home() {
             </div>
           </section>
 
-          {/* Rețetele zilei */}
           <section id="recipes" className="mb-12">
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -371,7 +361,6 @@ export default function Home() {
             </div>
           </section>
 
-          {/* Cele mai ieftine */}
           <section>
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -404,10 +393,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* SELECT VIEW */}
       {activeView === 'select' && (
         <div className="max-w-7xl mx-auto px-4 py-8">
-          {/* Header cu totaluri */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
@@ -415,7 +402,6 @@ export default function Home() {
                 <p className="text-slate-500">Apasă pe produsele pe care vrei să le adaugi în coș</p>
               </div>
               
-              {/* Sumar selecție */}
               <div className="flex items-center gap-6 bg-slate-50 rounded-xl p-4">
                 <div className="text-center">
                   <p className="text-2xl font-bold text-slate-800">{selectedTotal.count}</p>
@@ -435,7 +421,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Filtre categorii */}
           <div className="flex gap-2 overflow-x-auto pb-4 mb-6">
             <button
               onClick={() => setCategoryFilter('all')}
@@ -462,7 +447,6 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Grid produse */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {filteredOffers.map(offer => (
               <div
@@ -506,7 +490,6 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Buton generat floating */}
           {selectedProducts.length > 0 && (
             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
               <button
@@ -533,7 +516,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* RESULTS VIEW */}
       {activeView === 'results' && (
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="text-center mb-8">
@@ -563,7 +545,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Recipe Modal */}
       {selectedRecipe && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSelectedRecipe(null)}>
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -589,7 +570,6 @@ export default function Home() {
             </div>
 
             <div className="p-6">
-              {/* Stats */}
               <div className="grid grid-cols-4 gap-3 mb-6">
                 <div className="bg-emerald-50 rounded-xl p-3 text-center">
                   <p className="text-xl font-bold text-emerald-600">{selectedRecipe.estimated_cost?.toFixed(0) || 0}</p>
@@ -609,7 +589,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Ingrediente */}
               <div className="mb-6">
                 <h3 className="font-semibold text-slate-800 mb-3">Ingrediente</h3>
                 <div className="space-y-2">
@@ -640,7 +619,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Mod de preparare */}
               <div className="mb-6">
                 <h3 className="font-semibold text-slate-800 mb-3">Mod de preparare</h3>
                 <ol className="space-y-3">
@@ -655,7 +633,6 @@ export default function Home() {
                 </ol>
               </div>
 
-              {/* Sfat */}
               {selectedRecipe.tips && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                   <h4 className="font-medium text-amber-800 mb-1">Sfat util</h4>
@@ -667,7 +644,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Footer */}
       <footer className="bg-slate-900 text-white py-8">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <h3 className="text-lg font-semibold mb-2">Chef Anti-Inflație</h3>

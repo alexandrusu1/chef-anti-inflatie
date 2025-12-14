@@ -1,4 +1,4 @@
-from fastapi import FastAPI, BackgroundTasks, Query
+from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -11,18 +11,20 @@ import logging
 import json
 import os
 
-from app.services.scraper_service import get_weekly_offers, force_refresh_offers, run_full_scrape
-from app.services.ai_chef import generate_recipes_ai, generate_recipes_for_products, get_top_discount_recipes, get_cheapest_recipes
+from app.services.scraper_service import get_weekly_offers, run_full_scrape
+from app.services.ai_chef import generate_recipes_for_products, get_top_discount_recipes, get_cheapest_recipes
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 CACHE_FILE = "data/recipe_cache.json"
+
 recipe_cache = {
     "top_recipes": [],
     "cheapest_recipes": [],
     "last_updated": None
 }
+
 
 def load_cache():
     global recipe_cache
@@ -30,18 +32,20 @@ def load_cache():
         if os.path.exists(CACHE_FILE):
             with open(CACHE_FILE, 'r', encoding='utf-8') as f:
                 recipe_cache = json.load(f)
-                logger.info(f"📦 Cache loaded: {len(recipe_cache.get('top_recipes', []))} top, {len(recipe_cache.get('cheapest_recipes', []))} cheap")
+                logger.info(f"Cache loaded: {len(recipe_cache.get('top_recipes', []))} top, {len(recipe_cache.get('cheapest_recipes', []))} cheap")
     except Exception as e:
         logger.error(f"Cache load error: {e}")
+
 
 def save_cache():
     try:
         os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
         with open(CACHE_FILE, 'w', encoding='utf-8') as f:
             json.dump(recipe_cache, f, ensure_ascii=False, indent=2)
-        logger.info("💾 Cache saved")
+        logger.info("Cache saved")
     except Exception as e:
         logger.error(f"Cache save error: {e}")
+
 
 def is_cache_valid():
     if not recipe_cache.get("last_updated"):
@@ -59,17 +63,17 @@ scheduler = AsyncIOScheduler()
 
 
 async def scheduled_scrape():
-    logger.info(f"[{datetime.now()}] 🔄 Starting scheduled scrape...")
+    logger.info(f"[{datetime.now()}] Starting scheduled scrape...")
     try:
         offers = await run_full_scrape()
-        logger.info(f"[{datetime.now()}] ✅ Scrape done: {len(offers)} offers")
+        logger.info(f"[{datetime.now()}] Scrape done: {len(offers)} offers")
         await regenerate_daily_recipes()
     except Exception as e:
-        logger.error(f"[{datetime.now()}] ❌ Scrape failed: {e}")
+        logger.error(f"[{datetime.now()}] Scrape failed: {e}")
 
 
 async def regenerate_daily_recipes():
-    logger.info("🍳 Regenerating daily recipes...")
+    logger.info("Regenerating daily recipes...")
     try:
         offers = get_weekly_offers()
         if not offers:
@@ -81,20 +85,20 @@ async def regenerate_daily_recipes():
         recipe_cache["last_updated"] = datetime.now().isoformat()
         save_cache()
         
-        logger.info(f"✅ Recipes regenerated: {len(recipe_cache['top_recipes'])} top, {len(recipe_cache['cheapest_recipes'])} cheap")
+        logger.info(f"Recipes regenerated: {len(recipe_cache['top_recipes'])} top, {len(recipe_cache['cheapest_recipes'])} cheap")
     except Exception as e:
         logger.error(f"Recipe generation error: {e}")
 
 
 async def hourly_recipe_refresh():
-    logger.info("⏰ Hourly recipe check...")
+    logger.info("Hourly recipe check...")
     if not is_cache_valid():
         await regenerate_daily_recipes()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 Starting Chef Anti-Inflație API v4.0...")
+    logger.info("Starting Chef Anti-Inflație API...")
     load_cache()
     
     scheduler.add_job(scheduled_scrape, CronTrigger(hour=6, minute=0), id="morning_scrape", replace_existing=True)
@@ -103,7 +107,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(hourly_recipe_refresh, CronTrigger(minute=30), id="hourly_refresh", replace_existing=True)
     
     scheduler.start()
-    logger.info("📅 Scheduler: scrape at 6:00, 12:00, 18:00 + hourly recipe check")
+    logger.info("Scheduler started: scrape at 6:00, 12:00, 18:00")
     
     asyncio.create_task(scheduled_scrape())
     
@@ -111,13 +115,13 @@ async def lifespan(app: FastAPI):
     
     scheduler.shutdown()
     save_cache()
-    logger.info("👋 Shutdown complete")
+    logger.info("Shutdown complete")
 
 
 app = FastAPI(
     title="Chef Anti-Inflație API",
-    version="4.0.0",
-    description="100% AI-powered recipes from real supermarket offers",
+    version="1.0.0",
+    description="Rețete inteligente bazate pe ofertele din supermarketuri",
     lifespan=lifespan
 )
 
@@ -133,16 +137,9 @@ app.add_middleware(
 @app.get("/")
 async def root():
     return {
-        "app": "👨‍🍳 Chef Anti-Inflație",
-        "version": "4.0.0",
+        "app": "Chef Anti-Inflație",
+        "version": "1.0.0",
         "status": "running",
-        "features": [
-            "🛒 Real Lidl offers (auto-updated)",
-            "🤖 100% AI-generated recipes",
-            "💰 Budget optimization",
-            "📊 Top discount & cheapest recipes",
-            "🔄 Hourly refresh"
-        ],
         "cache_valid": is_cache_valid(),
         "last_update": recipe_cache.get("last_updated")
     }
@@ -153,27 +150,23 @@ async def get_offers():
     offers = get_weekly_offers()
     return {
         "offers": offers,
-        "total": len(offers),
-        "message": "Selectează produse pentru a genera rețete personalizate!"
+        "total": len(offers)
     }
 
 
 @app.get("/api/recipes/top")
 async def get_top_recipes():
-    """Top 3 rețete cu cele mai mari reduceri - regenerate zilnic"""
     if not recipe_cache.get("top_recipes") or not is_cache_valid():
         await regenerate_daily_recipes()
     return {
         "recipes": recipe_cache.get("top_recipes", []),
         "type": "top_discount",
-        "description": "🔥 Rețete cu produsele la cel mai mare discount",
         "generated_at": recipe_cache.get("last_updated")
     }
 
 
 @app.post("/api/recipes/refresh")
 async def force_refresh_recipes():
-    """Forțează regenerarea rețetelor"""
     await regenerate_daily_recipes()
     return {
         "message": "Rețete regenerate!",
@@ -185,20 +178,17 @@ async def force_refresh_recipes():
 
 @app.get("/api/recipes/cheapest")
 async def get_cheap_recipes():
-    """Top 3 cele mai ieftine rețete - regenerate zilnic"""
     if not recipe_cache.get("cheapest_recipes") or not is_cache_valid():
         await regenerate_daily_recipes()
     return {
         "recipes": recipe_cache.get("cheapest_recipes", []),
         "type": "budget_friendly",
-        "description": "💰 Cele mai economice rețete posibile",
         "generated_at": recipe_cache.get("last_updated")
     }
 
 
 @app.post("/api/recipes/generate")
 async def generate_custom_recipes(request: GenerateRequest):
-    """Generează rețete pentru produsele selectate de utilizator"""
     offers = get_weekly_offers()
     
     if not request.product_ids:
@@ -223,7 +213,6 @@ async def generate_custom_recipes(request: GenerateRequest):
 
 @app.get("/api/dashboard")
 async def get_dashboard():
-    """Dashboard principal - oferte + rețete pre-generate"""
     offers = get_weekly_offers()
     
     if not recipe_cache.get("top_recipes") or not is_cache_valid():
@@ -245,16 +234,14 @@ async def get_dashboard():
             "total_potential_savings": round(total_savings, 2),
             "categories": categories,
             "recipes_updated": recipe_cache.get("last_updated")
-        },
-        "cta": "👆 Selectează produse pentru rețete personalizate!"
+        }
     }
 
 
 @app.post("/api/refresh")
 async def refresh_all(background_tasks: BackgroundTasks):
-    """Force refresh oferte + rețete"""
     background_tasks.add_task(scheduled_scrape)
-    return {"message": "🔄 Refresh started", "status": "processing"}
+    return {"message": "Refresh started", "status": "processing"}
 
 
 @app.get("/api/health")
