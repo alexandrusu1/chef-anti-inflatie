@@ -1,204 +1,227 @@
 import os
 import json
-from typing import List, Dict
+import hashlib
+from datetime import datetime
+from typing import List, Dict, Optional
 from dotenv import load_dotenv
-from openai import OpenAI
 
 load_dotenv()
 
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
-GITHUB_MODELS_ENDPOINT = "https://models.inference.ai.azure.com"
 
+def get_ai_client():
+    if GROQ_API_KEY:
+        from openai import OpenAI
+        return OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY), "llama-3.3-70b-versatile"
+    elif GITHUB_TOKEN and GITHUB_TOKEN != "your_github_token_here":
+        from openai import OpenAI
+        return OpenAI(base_url="https://models.inference.ai.azure.com", api_key=GITHUB_TOKEN), "gpt-4o-mini"
+    return None, None
 
-def generate_recipes(products: List[Dict]) -> List[Dict]:
-    if not GITHUB_TOKEN:
-        print("GITHUB_TOKEN nu este setat, returnez rețete generate local")
-        return generate_local_recipes(products)
+def generate_recipes_ai(products: List[Dict], recipe_type: str = "general", max_budget: Optional[float] = None) -> List[Dict]:
+    client, model = get_ai_client()
+    if not client:
+        return generate_smart_local_recipes(products, recipe_type, max_budget)
     
-    try:
-        client = OpenAI(
-            base_url=GITHUB_MODELS_ENDPOINT,
-            api_key=GITHUB_TOKEN,
-        )
-        
-        product_list = "\n".join([f"- {p['name']} ({p['new_price']} lei, reducere {p.get('discount_percentage', 0)}%)" for p in products[:15]])
-        
-        prompt = f"""Ești un chef român expert în bucătăria economică. Generează 3 rețete delicioase, nutritive și ieftine folosind DOAR aceste produse la ofertă:
+    # Grupăm produsele pe categorii pentru AI
+    product_list = "\n".join([f"- {p['name']}: {p['new_price']:.2f} lei (-{p.get('discount_percentage', 0)}%)" for p in products[:25]])
+    
+    type_instructions = {
+        "top": "Creează 3 rețete GUSTOASE și REALISTE folosind produsele cu discount mare.",
+        "cheapest": "Creează 3 rețete ECONOMICE dar delicioase, cu cost total mic.",
+        "selected": "Creează 3 rețete folosind produsele selectate care SE POTRIVESC împreună.",
+        "general": "Creează 3 rețete variate: un fel principal, o supă/ciorbă, și o gustare/salată."
+    }
+    
+    budget_note = f"\nBUGET MAXIM per rețetă: {max_budget} lei!" if max_budget else ""
+    
+    prompt = f"""Ești CHEF profesionist cu experiență în bucătăria românească și internațională.
 
+PRODUSE LA REDUCERE (Lidl România):
 {product_list}
 
-Pentru fiecare rețetă returnează un JSON valid cu structura:
-{{
-  "recipes": [
-    {{
-      "name": "Numele rețetei",
-      "description": "Descriere scurtă (maxim 100 caractere)",
-      "ingredients": ["ingredient 1 cu cantitate", "ingredient 2 cu cantitate"],
-      "instructions": ["Pasul 1", "Pasul 2", "Pasul 3"],
-      "prep_time": "20 min",
-      "servings": 4,
-      "estimated_cost": 25.50,
-      "nutrition": {{"calories": 450, "protein": "25g", "carbs": "35g", "fat": "15g"}}
-    }}
-  ]
-}}
+SARCINĂ: {type_instructions.get(recipe_type, type_instructions["general"])}{budget_note}
 
-Returnează DOAR JSON-ul valid, fără explicații sau markdown."""
+⚠️ REGULI OBLIGATORII:
+1. SENS CULINAR: Ingredientele trebuie să se potrivească! 
+   - CORECT: carne+legume, pește+lămâie, fructe+zahăr, paste+sos
+   - GREȘIT: fructe+carne, pește+mere, slănină+ciocolată, legume+gem
+   
+2. REȚETE REALE pe care oamenii le gătesc:
+   - DA: ciorbă de legume, piept de pui la cuptor, paste carbonara, salată grecească, tocăniță, pilaf, clătite, prăjitură
+   - NU: combinații absurde, rețete inventate, amestecuri ciudate
 
+3. FRUCTELE merg doar în: deserturi, smoothie-uri, salate de fructe, prăjituri, compoturi
+   - NU pune mere/pere/portocale în mâncăruri sărate!
+
+4. LEGUMELE (țelină, morcov, ceapă) merg în: ciorbe, tocănițe, supe, garnituri
+   - NU le combina cu fructe sau dulciuri!
+
+5. Folosește MINIM 2 produse din ofertă per rețetă, dar DOAR dacă se potrivesc!
+   - Dacă nu se potrivesc, folosește 1 produs + ingrediente de bază
+
+INGREDIENTE SUPLIMENTARE (prețuri estimate):
+- Bază: ulei 3 lei, sare/piper 1 leu, ceapă 1.5 lei, usturoi 2 lei
+- Lactate: smântână 5 lei, ouă 8 lei, brânză 6 lei, lapte 4 lei
+- Carbohidrați: paste 4 lei, orez 4 lei, cartofi 3 lei/kg, pâine 3 lei
+- Carne: piept pui 20 lei/kg, carne tocată 25 lei/kg
+
+Răspunde STRICT cu JSON (fără markdown):
+{{"recipes": [
+  {{
+    "name": "Nume Rețetă Atrăgător",
+    "description": "Descriere apetisantă în max 60 caractere",
+    "ingredients": [
+      {{"name": "Produs", "quantity": "cantitate", "price": pret, "from_offer": true/false}}
+    ],
+    "instructions": ["Pas 1...", "Pas 2...", "Pas 3...", "Pas 4...", "Pas 5..."],
+    "prep_time": "X min",
+    "cook_time": "Y min", 
+    "servings": 4,
+    "estimated_cost": suma_totala,
+    "cost_per_serving": cost_per_portie,
+    "difficulty": "ușor/mediu/avansat",
+    "nutrition": {{"calories": X, "protein": X, "carbs": X, "fat": X, "fiber": X}},
+    "tags": ["categorie"],
+    "tips": "Sfat practic"
+  }}
+]}}"""
+
+    try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model, 
             messages=[
-                {"role": "system", "content": "Ești un chef român care creează rețete economice și nutritive. Răspunzi doar în JSON valid."},
+                {"role": "system", "content": "Ești un bucătar profesionist român. Creezi DOAR rețete realiste, gustoase, care au sens culinar. Nu combini ingrediente incompatibile. Răspunzi DOAR cu JSON valid, fără markdown sau explicații."}, 
                 {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=2000
+            ], 
+            temperature=0.7, 
+            max_tokens=4000
         )
-        
         content = response.choices[0].message.content.strip()
-        
-        if content.startswith("```"):
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
-        
+        if "```" in content:
+            content = content.split("```")[1].replace("json", "").strip()
         data = json.loads(content)
-        recipes = data.get("recipes", data if isinstance(data, list) else [])
-        
-        for i, recipe in enumerate(recipes):
-            recipe["id"] = i + 1
-            recipe["image_url"] = get_recipe_image(recipe.get("name", ""))
-            if "nutrition" not in recipe:
-                recipe["nutrition"] = {"calories": 400, "protein": "20g", "carbs": "40g", "fat": "12g"}
-        
+        recipes = data.get("recipes", [])
+        for i, r in enumerate(recipes):
+            r["id"] = i + 1
+            r["image_url"] = get_recipe_image(r.get("name", ""))
+            r["generated_at"] = datetime.now().isoformat()
+        print(f"AI: {len(recipes)} retete generate ({model})")
         return recipes
-        
     except Exception as e:
-        print(f"Eroare GitHub Models API: {e}")
-        return generate_local_recipes(products)
+        print(f"AI Error: {e}")
+        return generate_smart_local_recipes(products, recipe_type, max_budget)
 
+def generate_smart_local_recipes(products: List[Dict], recipe_type: str = "general", max_budget: Optional[float] = None) -> List[Dict]:
+    if not products:
+        return []
+    
+    # Sortăm produsele pentru a le folosi în rețete
+    recipes = []
+    now = datetime.now().isoformat()
+    
+    # Rețeta 1: Din primele 3 produse
+    p1 = products[:3]
+    cost1 = sum(x["new_price"] for x in p1) + 5
+    recipes.append({
+        "name": f"Preparare cu {p1[0]['name'].split()[0]}",
+        "description": f"Rețetă rapidă folosind {p1[0]['name'][:30]}",
+        "ingredients": [{"name": x["name"], "quantity": "300g", "price": x["new_price"], "from_offer": True} for x in p1] + [
+            {"name": "Ulei", "quantity": "2 linguri", "price": 2, "from_offer": False},
+            {"name": "Sare, piper", "quantity": "după gust", "price": 1, "from_offer": False},
+            {"name": "Usturoi", "quantity": "2 căței", "price": 2, "from_offer": False}
+        ],
+        "instructions": [
+            f"Pregătește {p1[0]['name']} - spală și taie",
+            "Încinge uleiul într-o tigaie mare",
+            "Adaugă ingredientele și călește 5 minute",
+            "Condimentează după gust cu sare și piper",
+            "Servește cald, ornat cu pătrunjel"
+        ],
+        "prep_time": "15 min", "cook_time": "20 min", "servings": 4,
+        "estimated_cost": round(cost1, 2), "cost_per_serving": round(cost1/4, 2),
+        "difficulty": "ușor",
+        "nutrition": {"calories": 350, "protein": 20, "carbs": 25, "fat": 15, "fiber": 5},
+        "tags": ["rapid", "economic"], "tips": "Poți adăuga smântână pentru mai multă cremozitate",
+        "image_url": get_recipe_image(p1[0]["name"]), "id": 1, "generated_at": now
+    })
+    
+    # Rețeta 2: Din produsele 4-6
+    if len(products) > 3:
+        p2 = products[3:6] if len(products) > 5 else products[3:]
+        cost2 = sum(x["new_price"] for x in p2) + 6
+        recipes.append({
+            "name": f"Gustare din {p2[0]['name'].split()[0]}" if p2 else "Gustare economică",
+            "description": f"Combinație savuroasă cu produse la ofertă",
+            "ingredients": [{"name": x["name"], "quantity": "250g", "price": x["new_price"], "from_offer": True} for x in p2] + [
+                {"name": "Ceapă", "quantity": "1 bucată", "price": 1.5, "from_offer": False},
+                {"name": "Roșii", "quantity": "2 bucăți", "price": 2.5, "from_offer": False},
+                {"name": "Condimente", "quantity": "după gust", "price": 2, "from_offer": False}
+            ],
+            "instructions": [
+                "Spală și pregătește toate ingredientele",
+                "Taie ceapa și roșiile mărunt",
+                "Combină ingredientele într-un vas mare",
+                "Amestecă bine și lasă 5 minute la marinat",
+                "Servește la temperatura camerei sau rece"
+            ],
+            "prep_time": "10 min", "cook_time": "15 min", "servings": 3,
+            "estimated_cost": round(cost2, 2), "cost_per_serving": round(cost2/3, 2),
+            "difficulty": "foarte ușor",
+            "nutrition": {"calories": 280, "protein": 15, "carbs": 30, "fat": 10, "fiber": 6},
+            "tags": ["vegetarian", "rapid"], "tips": "Perfect pentru un prânz ușor",
+            "image_url": get_recipe_image(p2[0]["name"] if p2 else "legume"), "id": 2, "generated_at": now
+        })
+    
+    # Rețeta 3: Din produsele 7-10
+    if len(products) > 6:
+        p3 = products[6:10] if len(products) > 9 else products[6:]
+        cost3 = sum(x["new_price"] for x in p3) + 4
+        recipes.append({
+            "name": f"Mâncare de {p3[0]['name'].split()[0]}" if p3 else "Rețetă surpriză",
+            "description": "Rețetă tradițională cu twist modern",
+            "ingredients": [{"name": x["name"], "quantity": "200g", "price": x["new_price"], "from_offer": True} for x in p3] + [
+                {"name": "Făină", "quantity": "2 linguri", "price": 1, "from_offer": False},
+                {"name": "Unt", "quantity": "30g", "price": 2, "from_offer": False},
+                {"name": "Verdeață", "quantity": "1 legătură", "price": 1, "from_offer": False}
+            ],
+            "instructions": [
+                "Pregătește un roux din făină și unt",
+                "Adaugă ingredientele principale treptat",
+                "Amestecă continuu pentru a nu se lipi",
+                "Lasă la fiert înăbușit 15-20 minute",
+                "Presară verdeață proaspătă la servire"
+            ],
+            "prep_time": "10 min", "cook_time": "25 min", "servings": 4,
+            "estimated_cost": round(cost3, 2), "cost_per_serving": round(cost3/4, 2),
+            "difficulty": "mediu",
+            "nutrition": {"calories": 320, "protein": 18, "carbs": 35, "fat": 12, "fiber": 4},
+            "tags": ["traditional", "satios"], "tips": "Se poate servi cu pâine proaspătă",
+            "image_url": get_recipe_image(p3[0]["name"] if p3 else "mancare"), "id": 3, "generated_at": now
+        })
+    
+    print(f"Local: Generated {len(recipes)} recipes from {len(products)} products")
+    return recipes[:3]
 
 def get_recipe_image(name: str) -> str:
-    name_lower = name.lower()
-    if any(w in name_lower for w in ['pui', 'chicken']):
-        return "https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=400"
-    if any(w in name_lower for w in ['porc', 'pork']):
-        return "https://images.unsplash.com/photo-1432139555190-58524dae6a55?w=400"
-    if any(w in name_lower for w in ['paste', 'pasta', 'spaghete']):
-        return "https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=400"
-    if any(w in name_lower for w in ['ciorba', 'supa', 'soup']):
-        return "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=400"
-    if any(w in name_lower for w in ['salata', 'salad']):
-        return "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400"
-    if any(w in name_lower for w in ['cartofi', 'potato']):
-        return "https://images.unsplash.com/photo-1518977676601-b53f82bbe903?w=400"
-    if any(w in name_lower for w in ['orez', 'rice', 'pilaf']):
-        return "https://images.unsplash.com/photo-1516714435131-44d6b64dc6a2?w=400"
+    n = name.lower()
+    if any(x in n for x in ["pui", "piept"]): return "https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=400"
+    if any(x in n for x in ["porc", "ceafa"]): return "https://images.unsplash.com/photo-1432139555190-58524dae6a55?w=400"
+    if any(x in n for x in ["peste", "somon"]): return "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=400"
+    if any(x in n for x in ["paste", "spaghete"]): return "https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=400"
+    if any(x in n for x in ["orez", "pilaf"]): return "https://images.unsplash.com/photo-1516714435131-44d6b64dc6a2?w=400"
+    if any(x in n for x in ["legume", "tocan"]): return "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400"
     return "https://images.unsplash.com/photo-1466637574441-749b8f19452f?w=400"
 
+def generate_recipes_for_products(products: List[Dict], selected_ids: List[str]) -> List[Dict]:
+    selected = [p for p in products if p.get("id") in selected_ids]
+    return generate_recipes_ai(selected if selected else products[:5], "selected")
 
-def generate_local_recipes(products: List[Dict]) -> List[Dict]:
-    product_names = [p["name"].lower() for p in products]
-    recipes = []
-    
-    if any("pui" in n or "piept" in n for n in product_names):
-        recipes.append({
-            "id": 1,
-            "name": "Piept de pui la cuptor cu legume",
-            "description": "Piept de pui suculent cu garnitură de legume la cuptor",
-            "ingredients": ["500g piept de pui", "300g cartofi", "200g morcovi", "1 ceapă", "ulei, sare, piper, boia"],
-            "instructions": [
-                "Preîncălzește cuptorul la 200°C",
-                "Taie puiul în bucăți și asezonează cu sare, piper și boia",
-                "Curăță și taie legumele cuburi",
-                "Pune totul într-o tavă cu ulei",
-                "Coace 40-45 minute până se rumenește"
-            ],
-            "prep_time": "50 min",
-            "servings": 4,
-            "estimated_cost": sum(p["new_price"] for p in products[:4]) if products else 30,
-            "image_url": "https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=400",
-            "nutrition": {"calories": 380, "protein": "35g", "carbs": "25g", "fat": "12g"}
-        })
-    
-    if any("porc" in n or "ceafa" in n for n in product_names):
-        recipes.append({
-            "id": 2,
-            "name": "Ceafă de porc cu sos de roșii",
-            "description": "Ceafă fragedă în sos aromat de roșii cu usturoi",
-            "ingredients": ["600g ceafă de porc", "400g roșii/bulion", "4 căței usturoi", "ceapă, ardei", "condimente"],
-            "instructions": [
-                "Prăjește ceafa în ulei încins pe ambele părți",
-                "Scoate carnea și călește ceapa și ardeiul",
-                "Adaugă usturoiul și roșiile/bulionul",
-                "Pune carnea înapoi și lasă la foc mic 30 min",
-                "Servește cu mămăliguță sau piure"
-            ],
-            "prep_time": "45 min",
-            "servings": 4,
-            "estimated_cost": sum(p["new_price"] for p in products[:4]) if products else 35,
-            "image_url": "https://images.unsplash.com/photo-1432139555190-58524dae6a55?w=400",
-            "nutrition": {"calories": 450, "protein": "38g", "carbs": "15g", "fat": "28g"}
-        })
-    
-    if any("paste" in n or "orez" in n for n in product_names):
-        recipes.append({
-            "id": 3,
-            "name": "Paste cu sos de roșii și legume",
-            "description": "Paste rapide cu sos de roșii proaspete și legume de sezon",
-            "ingredients": ["400g paste", "500g roșii", "2 ardei", "ceapă, usturoi", "parmezan, busuioc"],
-            "instructions": [
-                "Fierbe pastele conform instrucțiunilor",
-                "Călește ceapa și ardeiul tăiat cuburi",
-                "Adaugă roșiile tocate și usturoiul",
-                "Lasă sosul să se reducă 15 minute",
-                "Amestecă cu pastele și presară parmezan"
-            ],
-            "prep_time": "25 min",
-            "servings": 4,
-            "estimated_cost": sum(p["new_price"] for p in products[:3]) if products else 20,
-            "image_url": "https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=400",
-            "nutrition": {"calories": 420, "protein": "14g", "carbs": "72g", "fat": "8g"}
-        })
-    
-    if len(recipes) < 3:
-        recipes.append({
-            "id": len(recipes) + 1,
-            "name": "Ciorbă de legume cu smântână",
-            "description": "Ciorbă tradițională românească, hrănitoare și economică",
-            "ingredients": ["2 cartofi", "2 morcovi", "1 ceapă", "1 ardei", "200ml smântână", "leuștean, bors"],
-            "instructions": [
-                "Curăță și taie legumele cuburi mici",
-                "Pune la fiert în 2L apă cu sare",
-                "După 20 min adaugă borșul",
-                "La final pune smântâna și leușteanul",
-                "Servește caldă cu ardei iute"
-            ],
-            "prep_time": "35 min",
-            "servings": 6,
-            "estimated_cost": 18,
-            "image_url": "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=400",
-            "nutrition": {"calories": 180, "protein": "5g", "carbs": "22g", "fat": "8g"}
-        })
-    
-    if len(recipes) < 3:
-        recipes.append({
-            "id": len(recipes) + 1,
-            "name": "Cartofi țărănești cu ouă",
-            "description": "Mâncare simplă și consistentă, perfectă pentru cină",
-            "ingredients": ["1kg cartofi", "4 ouă", "200g cașcaval", "ceapă verde", "smântână"],
-            "instructions": [
-                "Fierbe cartofii în coajă, apoi curăță-i",
-                "Taie-i cuburi și prăjește-i în tigaie",
-                "Bate ouăle cu smântâna și condimente",
-                "Toarnă peste cartofi și amestecă",
-                "Presară cașcaval ras și servește"
-            ],
-            "prep_time": "40 min",
-            "servings": 4,
-            "estimated_cost": 22,
-            "image_url": "https://images.unsplash.com/photo-1518977676601-b53f82bbe903?w=400",
-            "nutrition": {"calories": 380, "protein": "18g", "carbs": "42g", "fat": "16g"}
-        })
-    
-    return recipes[:3]
+def get_top_discount_recipes(products: List[Dict]) -> List[Dict]:
+    top = sorted(products, key=lambda x: x.get("discount_percentage", 0), reverse=True)[:10]
+    return generate_recipes_ai(top, "top")
+
+def get_cheapest_recipes(products: List[Dict]) -> List[Dict]:
+    cheap = sorted(products, key=lambda x: x.get("new_price", 0))[:15]
+    return generate_recipes_ai(cheap, "cheapest", max_budget=25)
