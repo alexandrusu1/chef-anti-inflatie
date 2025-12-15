@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 
 interface Ingredient {
   name: string
@@ -38,11 +38,9 @@ interface Recipe {
     protein: number
     carbs: number
     fat: number
-    fiber?: number
   }
   tags?: string[]
   tips?: string
-  generated_at?: string
 }
 
 interface DashboardData {
@@ -57,7 +55,7 @@ interface DashboardData {
   }
 }
 
-const RECIPE_IMAGES = [
+const IMAGES = [
   'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600',
   'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=600',
   'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=600',
@@ -66,105 +64,106 @@ const RECIPE_IMAGES = [
   'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600',
   'https://images.unsplash.com/photo-1473093295043-cdd812d0e601?w=600',
   'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=600',
-  'https://images.unsplash.com/photo-1499028344343-cd173ffc68a9?w=600',
-  'https://images.unsplash.com/photo-1484723091739-30a097e8f929?w=600',
 ]
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null)
-  const [selectedProducts, setSelectedProducts] = useState<string[]>([])
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set())
   const [customRecipes, setCustomRecipes] = useState<Recipe[]>([])
   const [generating, setGenerating] = useState(false)
-  const [activeView, setActiveView] = useState<'home' | 'select' | 'results'>('home')
-  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [view, setView] = useState<'home' | 'products' | 'results'>('home')
+  const [category, setCategory] = useState('all')
+  const [searchQuery, setSearchQuery] = useState('')
 
-  useEffect(() => {
-    fetchDashboard()
-  }, [])
-
-  const fetchDashboard = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_URL}/api/dashboard`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const result = await response.json()
-      setData(result)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Eroare la încărcare')
+      const res = await fetch(`${API}/api/dashboard`)
+      if (!res.ok) throw new Error(`Eroare ${res.status}`)
+      setData(await res.json())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Eroare necunoscută')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => { fetchData() }, [fetchData])
 
   const generateRecipes = async () => {
-    if (selectedProducts.length === 0) return
+    if (selectedProducts.size === 0) return
     
+    setGenerating(true)
     try {
-      setGenerating(true)
-      const response = await fetch(`${API_URL}/api/recipes/generate`, {
+      const res = await fetch(`${API}/api/recipes/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_ids: selectedProducts })
+        body: JSON.stringify({ product_ids: Array.from(selectedProducts) })
       })
-      
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const result = await response.json()
+      if (!res.ok) throw new Error()
+      const result = await res.json()
       setCustomRecipes(result.recipes || [])
-      setActiveView('results')
-    } catch (err) {
-      console.error('Error:', err)
+      setView('results')
+    } catch {
+      alert('Eroare la generarea rețetelor')
     } finally {
       setGenerating(false)
     }
   }
 
   const toggleProduct = (id: string) => {
-    setSelectedProducts(prev => 
-      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
-    )
+    setSelectedProducts(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
   }
 
-  const selectedTotal = useMemo(() => {
-    if (!data?.offers) return { count: 0, total: 0, savings: 0 }
-    const selected = data.offers.filter(o => selectedProducts.includes(o.id))
+  const clearSelection = () => {
+    setSelectedProducts(new Set())
+    setCustomRecipes([])
+    setView('products')
+  }
+
+  const totals = useMemo(() => {
+    if (!data?.offers) return { count: 0, price: 0, savings: 0 }
+    const items = data.offers.filter(o => selectedProducts.has(o.id))
     return {
-      count: selected.length,
-      total: selected.reduce((sum, o) => sum + o.new_price, 0),
-      savings: selected.reduce((sum, o) => sum + (o.old_price - o.new_price), 0)
+      count: items.length,
+      price: items.reduce((s, o) => s + o.new_price, 0),
+      savings: items.reduce((s, o) => s + (o.old_price - o.new_price), 0)
     }
   }, [data?.offers, selectedProducts])
 
   const filteredOffers = useMemo(() => {
     if (!data?.offers) return []
-    if (categoryFilter === 'all') return data.offers
-    return data.offers.filter(o => o.category === categoryFilter)
-  }, [data?.offers, categoryFilter])
+    let items = data.offers
+    if (category !== 'all') items = items.filter(o => o.category === category)
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      items = items.filter(o => o.name.toLowerCase().includes(q))
+    }
+    return items
+  }, [data?.offers, category, searchQuery])
 
   const categories = useMemo(() => {
     if (!data?.stats.categories) return []
     return Object.entries(data.stats.categories).sort((a, b) => b[1] - a[1])
   }, [data?.stats.categories])
 
-  const formatIngredient = (ing: Ingredient | string): string => {
-    if (typeof ing === 'string') return ing
-    return `${ing.name} - ${ing.quantity}`
-  }
-
-  const getRecipeImage = (recipe: Recipe, index: number) => {
-    return RECIPE_IMAGES[index % RECIPE_IMAGES.length]
-  }
+  const getImage = (index: number) => IMAGES[index % IMAGES.length]
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-lg text-slate-600 font-medium">Se încarcă ofertele...</p>
+          <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-slate-600">Se încarcă ofertele...</p>
         </div>
       </div>
     )
@@ -172,19 +171,16 @@ export default function Home() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center p-8 bg-white rounded-2xl shadow-lg max-w-md">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-sm text-center">
+          <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-7 h-7 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">Nu s-au putut încărca datele</h2>
-          <p className="text-slate-500 mb-6">{error}</p>
-          <button 
-            onClick={fetchDashboard} 
-            className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors"
-          >
+          <h2 className="text-lg font-semibold mb-2">Eroare la încărcare</h2>
+          <p className="text-slate-500 mb-4">{error}</p>
+          <button onClick={fetchData} className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
             Încearcă din nou
           </button>
         </div>
@@ -194,115 +190,78 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
+        <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               </div>
               <div>
-                <h1 className="text-xl font-bold text-slate-800">Chef Anti-Inflație</h1>
-                <p className="text-sm text-slate-500">Rețete inteligente din oferte reale</p>
+                <h1 className="text-lg font-bold text-slate-800">Chef Anti-Inflație</h1>
+                <p className="text-xs text-slate-500 hidden sm:block">Rețete din oferte reale</p>
               </div>
             </div>
             
-            <div className="hidden md:flex items-center gap-6">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-emerald-600">{data?.stats.total_offers || 0}</p>
-                <p className="text-xs text-slate-500 uppercase tracking-wide">Oferte active</p>
-              </div>
-              <div className="w-px h-10 bg-slate-200"></div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-emerald-600">{data?.stats.total_potential_savings?.toFixed(0) || 0} lei</p>
-                <p className="text-xs text-slate-500 uppercase tracking-wide">Economii posibile</p>
+            <div className="flex items-center gap-4 text-sm">
+              <div className="hidden md:flex items-center gap-4">
+                <div className="text-right">
+                  <p className="font-bold text-emerald-600">{data?.stats.total_offers}</p>
+                  <p className="text-xs text-slate-500">oferte</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-emerald-600">{data?.stats.total_potential_savings?.toFixed(0)} lei</p>
+                  <p className="text-xs text-slate-500">economii</p>
+                </div>
               </div>
             </div>
           </div>
+          
+          <nav className="flex gap-1 mt-3 -mb-3">
+            {[
+              { id: 'home', label: 'Acasă' },
+              { id: 'products', label: 'Produse', badge: selectedProducts.size },
+              ...(customRecipes.length ? [{ id: 'results', label: 'Rețete', badge: customRecipes.length }] : [])
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setView(tab.id as typeof view)}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                  view === tab.id
+                    ? 'border-emerald-600 text-emerald-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                {tab.label}
+                {tab.badge ? (
+                  <span className="bg-emerald-600 text-white text-xs px-1.5 py-0.5 rounded-full">{tab.badge}</span>
+                ) : null}
+              </button>
+            ))}
+          </nav>
         </div>
       </header>
 
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex gap-1">
-            <button
-              onClick={() => setActiveView('home')}
-              className={`px-6 py-4 font-medium text-sm border-b-2 transition-colors ${
-                activeView === 'home' 
-                  ? 'border-emerald-600 text-emerald-600' 
-                  : 'border-transparent text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Acasă
-            </button>
-            <button
-              onClick={() => setActiveView('select')}
-              className={`px-6 py-4 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeView === 'select' 
-                  ? 'border-emerald-600 text-emerald-600' 
-                  : 'border-transparent text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Selectează produse
-              {selectedProducts.length > 0 && (
-                <span className="bg-emerald-600 text-white text-xs px-2 py-0.5 rounded-full">
-                  {selectedProducts.length}
-                </span>
-              )}
-            </button>
-            {customRecipes.length > 0 && (
-              <button
-                onClick={() => setActiveView('results')}
-                className={`px-6 py-4 font-medium text-sm border-b-2 transition-colors ${
-                  activeView === 'results' 
-                    ? 'border-emerald-600 text-emerald-600' 
-                    : 'border-transparent text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Rețetele tale ({customRecipes.length})
-              </button>
-            )}
-          </div>
-        </div>
-      </nav>
-
-      {activeView === 'home' && (
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <section className="mb-12">
-            <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-3xl p-8 md:p-12 text-white relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
-              <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
-              
-              <div className="relative z-10 max-w-2xl">
-                <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                  Gătește mai ieftin cu produsele la ofertă
-                </h2>
-                <p className="text-lg text-emerald-100 mb-6 leading-relaxed">
-                  Aplicația noastră analizează în timp real ofertele din supermarketuri și generează 
-                  automat rețete delicioase folosind ingredientele cu cele mai mari reduceri. 
-                  Economisești bani fără să renunți la calitate.
+      {view === 'home' && (
+        <div className="max-w-6xl mx-auto px-4 py-6">
+          <section className="mb-8">
+            <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-2xl p-6 md:p-10 text-white relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="relative z-10 max-w-xl">
+                <h2 className="text-2xl md:text-3xl font-bold mb-3">Gătește mai ieftin cu produsele la ofertă</h2>
+                <p className="text-emerald-100 mb-6">
+                  Selectează produse din supermarket și primești instant rețete personalizate generate de AI.
                 </p>
-                <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 mb-6">
-                  <p className="text-sm text-emerald-100">
-                    <span className="font-semibold text-white">Acum disponibil:</span> Lidl România
-                  </p>
-                  <p className="text-sm text-emerald-200">
-                    <span className="font-semibold text-emerald-100">În curând:</span> Kaufland, Carrefour, Mega Image, Penny
-                  </p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex flex-wrap gap-3">
                   <button
-                    onClick={() => setActiveView('select')}
-                    className="px-8 py-4 bg-white text-emerald-700 rounded-xl font-semibold hover:bg-emerald-50 transition-colors shadow-lg"
+                    onClick={() => setView('products')}
+                    className="px-6 py-3 bg-white text-emerald-700 rounded-lg font-semibold hover:bg-emerald-50 transition-colors"
                   >
-                    Începe să selectezi produse
+                    Selectează produse
                   </button>
-                  <a 
-                    href="#recipes" 
-                    className="px-8 py-4 bg-emerald-500/30 text-white rounded-xl font-semibold hover:bg-emerald-500/40 transition-colors text-center"
-                  >
+                  <a href="#recipes" className="px-6 py-3 bg-white/20 rounded-lg font-semibold hover:bg-white/30 transition-colors">
                     Vezi rețetele zilei
                   </a>
                 </div>
@@ -310,136 +269,104 @@ export default function Home() {
             </div>
           </section>
 
-          <section className="mb-12">
-            <h3 className="text-xl font-semibold text-slate-800 mb-6 text-center">Cum funcționează</h3>
-            <div className="grid md:grid-cols-3 gap-6">
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-                <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-4">
-                  <span className="text-emerald-600 font-bold text-lg">1</span>
+          <section className="grid md:grid-cols-3 gap-4 mb-10">
+            {[
+              { step: '1', title: 'Verificăm ofertele', desc: 'Scanăm automat prețurile din Lidl' },
+              { step: '2', title: 'Selectezi produsele', desc: 'Vezi cât economisești în timp real' },
+              { step: '3', title: 'Primești rețete', desc: 'AI generează rețete personalizate' }
+            ].map(item => (
+              <div key={item.step} className="bg-white rounded-xl p-5 border border-slate-100">
+                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center mb-3">
+                  <span className="text-emerald-600 font-bold">{item.step}</span>
                 </div>
-                <h4 className="font-semibold text-slate-800 mb-2">Verificăm ofertele</h4>
-                <p className="text-slate-600 text-sm">Scanăm automat prețurile din Lidl și identificăm produsele cu cele mai mari reduceri.</p>
+                <h4 className="font-semibold text-slate-800 mb-1">{item.title}</h4>
+                <p className="text-slate-500 text-sm">{item.desc}</p>
               </div>
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-                <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-4">
-                  <span className="text-emerald-600 font-bold text-lg">2</span>
-                </div>
-                <h4 className="font-semibold text-slate-800 mb-2">Selectezi produsele</h4>
-                <p className="text-slate-600 text-sm">Alegi ce produse vrei să cumperi și vezi în timp real cât cheltuiești și cât economisești.</p>
-              </div>
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-                <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-4">
-                  <span className="text-emerald-600 font-bold text-lg">3</span>
-                </div>
-                <h4 className="font-semibold text-slate-800 mb-2">Primești rețete</h4>
-                <p className="text-slate-600 text-sm">Inteligența artificială generează rețete personalizate folosind exact produsele selectate.</p>
-              </div>
-            </div>
+            ))}
           </section>
 
-          <section id="recipes" className="mb-12">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-xl font-semibold text-slate-800">Rețete cu reduceri mari</h3>
-                <p className="text-slate-500 text-sm">Generate din produsele cu cel mai mare discount</p>
-              </div>
-            </div>
-            <div className="grid md:grid-cols-3 gap-6">
-              {data?.top_recipes?.map((recipe, index) => (
-                <RecipeCard 
-                  key={recipe.id} 
-                  recipe={recipe} 
-                  imageUrl={getRecipeImage(recipe, index)}
-                  onClick={() => setSelectedRecipe(recipe)} 
-                />
+          <section id="recipes" className="mb-10">
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">Rețete cu reduceri mari</h3>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {data?.top_recipes?.map((r, i) => (
+                <RecipeCard key={r.id} recipe={r} image={getImage(i)} onClick={() => setSelectedRecipe(r)} />
               ))}
-              {(!data?.top_recipes || data.top_recipes.length === 0) && (
-                <div className="col-span-3 text-center py-12 text-slate-500">
-                  Se generează rețetele...
-                </div>
+              {!data?.top_recipes?.length && (
+                <p className="col-span-3 text-center py-8 text-slate-400">Se generează rețetele...</p>
               )}
             </div>
           </section>
 
-          <section>
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-xl font-semibold text-slate-800">Cele mai economice rețete</h3>
-                <p className="text-slate-500 text-sm">Mâncare bună la prețuri minime</p>
-              </div>
-            </div>
-            <div className="grid md:grid-cols-3 gap-6">
-              {data?.cheapest_recipes?.map((recipe, index) => (
-                <RecipeCard 
-                  key={recipe.id} 
-                  recipe={recipe} 
-                  imageUrl={getRecipeImage(recipe, index + 5)}
-                  onClick={() => setSelectedRecipe(recipe)} 
-                />
+          <section className="mb-10">
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">Cele mai economice</h3>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {data?.cheapest_recipes?.map((r, i) => (
+                <RecipeCard key={r.id} recipe={r} image={getImage(i + 4)} onClick={() => setSelectedRecipe(r)} />
               ))}
-              {(!data?.cheapest_recipes || data.cheapest_recipes.length === 0) && (
-                <div className="col-span-3 text-center py-12 text-slate-500">
-                  Se generează rețetele...
-                </div>
-              )}
             </div>
           </section>
 
           {data?.stats.recipes_updated && (
-            <p className="text-center text-slate-400 text-sm mt-8">
+            <p className="text-center text-slate-400 text-xs">
               Actualizat: {new Date(data.stats.recipes_updated).toLocaleString('ro-RO')}
             </p>
           )}
         </div>
       )}
 
-      {activeView === 'select' && (
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      {view === 'products' && (
+        <div className="max-w-6xl mx-auto px-4 py-6">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold text-slate-800">Selectează produsele</h2>
-                <p className="text-slate-500">Apasă pe produsele pe care vrei să le adaugi în coș</p>
+                <h2 className="font-semibold text-slate-800">Selectează produsele</h2>
+                <p className="text-slate-500 text-sm">Apasă pe produse pentru a le adăuga</p>
               </div>
               
-              <div className="flex items-center gap-6 bg-slate-50 rounded-xl p-4">
+              <div className="flex items-center gap-4 bg-slate-50 rounded-lg px-4 py-2">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-slate-800">{selectedTotal.count}</p>
-                  <p className="text-xs text-slate-500">Produse</p>
+                  <p className="text-lg font-bold text-slate-800">{totals.count}</p>
+                  <p className="text-xs text-slate-500">produse</p>
                 </div>
-                <div className="w-px h-10 bg-slate-200"></div>
+                <div className="w-px h-8 bg-slate-200" />
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-emerald-600">{selectedTotal.total.toFixed(2)} lei</p>
-                  <p className="text-xs text-slate-500">Total de plată</p>
+                  <p className="text-lg font-bold text-emerald-600">{totals.price.toFixed(2)} lei</p>
+                  <p className="text-xs text-slate-500">total</p>
                 </div>
-                <div className="w-px h-10 bg-slate-200"></div>
+                <div className="w-px h-8 bg-slate-200" />
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-orange-500">{selectedTotal.savings.toFixed(2)} lei</p>
-                  <p className="text-xs text-slate-500">Economisești</p>
+                  <p className="text-lg font-bold text-orange-500">{totals.savings.toFixed(2)} lei</p>
+                  <p className="text-xs text-slate-500">economii</p>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-4 mb-6">
+          <div className="flex gap-2 mb-4">
+            <input
+              type="text"
+              placeholder="Caută produse..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="flex-1 max-w-xs px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-3 mb-4">
             <button
-              onClick={() => setCategoryFilter('all')}
-              className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
-                categoryFilter === 'all'
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              onClick={() => setCategory('all')}
+              className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                category === 'all' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
               }`}
             >
-              Toate ({data?.offers.length || 0})
+              Toate ({data?.offers.length})
             </button>
             {categories.map(([cat, count]) => (
               <button
                 key={cat}
-                onClick={() => setCategoryFilter(cat)}
-                className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
-                  categoryFilter === cat
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                onClick={() => setCategory(cat)}
+                className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                  category === cat ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
                 }`}
               >
                 {cat} ({count})
@@ -447,42 +374,37 @@ export default function Home() {
             ))}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {filteredOffers.map(offer => (
               <div
                 key={offer.id}
                 onClick={() => toggleProduct(offer.id)}
-                className={`bg-white rounded-xl overflow-hidden cursor-pointer transition-all border-2 ${
-                  selectedProducts.includes(offer.id)
-                    ? 'border-emerald-500 shadow-lg shadow-emerald-100'
-                    : 'border-transparent hover:shadow-md'
+                className={`bg-white rounded-lg overflow-hidden cursor-pointer transition-all border-2 ${
+                  selectedProducts.has(offer.id)
+                    ? 'border-emerald-500 shadow-md'
+                    : 'border-transparent hover:shadow-sm'
                 }`}
               >
-                <div className="relative h-32 bg-slate-100">
-                  <img 
-                    src={offer.image_url} 
-                    alt={offer.name} 
-                    className="w-full h-full object-cover" 
-                    onError={e => { e.currentTarget.style.display = 'none' }} 
-                  />
-                  <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-0.5 rounded-md text-xs font-semibold">
+                <div className="relative h-28 bg-slate-100">
+                  <img src={offer.image_url} alt="" className="w-full h-full object-cover" onError={e => e.currentTarget.style.opacity = '0'} />
+                  <span className="absolute top-1.5 right-1.5 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded">
                     -{offer.discount_percentage}%
-                  </div>
-                  {selectedProducts.includes(offer.id) && (
+                  </span>
+                  {selectedProducts.has(offer.id) && (
                     <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
-                      <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center">
-                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                       </div>
                     </div>
                   )}
                 </div>
-                <div className="p-3">
-                  <p className="text-xs text-slate-400 mb-1">{offer.category}</p>
-                  <h3 className="font-medium text-slate-800 text-sm line-clamp-2 h-10">{offer.name}</h3>
-                  <div className="flex items-baseline gap-2 mt-2">
-                    <span className="text-lg font-bold text-emerald-600">{offer.new_price.toFixed(2)} lei</span>
+                <div className="p-2.5">
+                  <p className="text-xs text-slate-400">{offer.category}</p>
+                  <h3 className="text-sm font-medium text-slate-800 line-clamp-2 h-10">{offer.name}</h3>
+                  <div className="flex items-baseline gap-1.5 mt-1.5">
+                    <span className="text-base font-bold text-emerald-600">{offer.new_price.toFixed(2)}</span>
                     <span className="text-xs text-slate-400 line-through">{offer.old_price.toFixed(2)}</span>
                   </div>
                 </div>
@@ -490,24 +412,24 @@ export default function Home() {
             ))}
           </div>
 
-          {selectedProducts.length > 0 && (
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+          {selectedProducts.size > 0 && (
+            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
               <button
                 onClick={generateRecipes}
                 disabled={generating}
-                className="px-8 py-4 bg-emerald-600 text-white rounded-xl font-semibold shadow-xl shadow-emerald-200 hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center gap-3"
+                className="px-6 py-3 bg-emerald-600 text-white rounded-lg font-semibold shadow-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
               >
                 {generating ? (
                   <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Se generează rețetele...
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Se generează...
                   </>
                 ) : (
                   <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    Generează rețete • {selectedTotal.total.toFixed(2)} lei
+                    Generează rețete ({totals.count} produse)
                   </>
                 )}
               </button>
@@ -516,29 +438,21 @@ export default function Home() {
         </div>
       )}
 
-      {activeView === 'results' && (
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">Rețetele tale personalizate</h2>
-            <p className="text-slate-500">Generate special din cele {selectedProducts.length} produse selectate</p>
+      {view === 'results' && (
+        <div className="max-w-6xl mx-auto px-4 py-6">
+          <div className="text-center mb-6">
+            <h2 className="text-xl font-bold text-slate-800 mb-1">Rețetele tale</h2>
+            <p className="text-slate-500">Generate din {selectedProducts.size} produse selectate</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
-            {customRecipes.map((recipe, index) => (
-              <RecipeCard 
-                key={recipe.id} 
-                recipe={recipe} 
-                imageUrl={getRecipeImage(recipe, index + 3)}
-                onClick={() => setSelectedRecipe(recipe)} 
-              />
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {customRecipes.map((r, i) => (
+              <RecipeCard key={r.id} recipe={r} image={getImage(i + 2)} onClick={() => setSelectedRecipe(r)} />
             ))}
           </div>
 
-          <div className="text-center mt-8">
-            <button
-              onClick={() => { setSelectedProducts([]); setCustomRecipes([]); setActiveView('select') }}
-              className="px-6 py-3 bg-slate-100 text-slate-700 rounded-xl font-medium hover:bg-slate-200 transition-colors"
-            >
+          <div className="text-center mt-6">
+            <button onClick={clearSelection} className="px-5 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">
               Selectează alte produse
             </button>
           </div>
@@ -546,168 +460,134 @@ export default function Home() {
       )}
 
       {selectedRecipe && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSelectedRecipe(null)}>
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="relative h-56 bg-slate-200">
-              <img 
-                src={RECIPE_IMAGES[selectedRecipe.id % RECIPE_IMAGES.length]} 
-                alt={selectedRecipe.name} 
-                className="w-full h-full object-cover" 
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-              <button 
-                onClick={() => setSelectedRecipe(null)} 
-                className="absolute top-4 right-4 w-10 h-10 bg-black/30 hover:bg-black/50 rounded-full flex items-center justify-center text-white transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-              <div className="absolute bottom-4 left-4 right-4 text-white">
-                <h2 className="text-2xl font-bold mb-1">{selectedRecipe.name}</h2>
-                <p className="text-white/80 text-sm">{selectedRecipe.description}</p>
-              </div>
-            </div>
-
-            <div className="p-6">
-              <div className="grid grid-cols-4 gap-3 mb-6">
-                <div className="bg-emerald-50 rounded-xl p-3 text-center">
-                  <p className="text-xl font-bold text-emerald-600">{selectedRecipe.estimated_cost?.toFixed(0) || 0}</p>
-                  <p className="text-xs text-slate-500">lei</p>
-                </div>
-                <div className="bg-orange-50 rounded-xl p-3 text-center">
-                  <p className="text-xl font-bold text-orange-600">{selectedRecipe.nutrition?.calories || 0}</p>
-                  <p className="text-xs text-slate-500">kcal</p>
-                </div>
-                <div className="bg-blue-50 rounded-xl p-3 text-center">
-                  <p className="text-xl font-bold text-blue-600">{selectedRecipe.nutrition?.protein || 0}g</p>
-                  <p className="text-xs text-slate-500">proteine</p>
-                </div>
-                <div className="bg-purple-50 rounded-xl p-3 text-center">
-                  <p className="text-xl font-bold text-purple-600">{selectedRecipe.servings}</p>
-                  <p className="text-xs text-slate-500">porții</p>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <h3 className="font-semibold text-slate-800 mb-3">Ingrediente</h3>
-                <div className="space-y-2">
-                  {selectedRecipe.ingredients?.map((ing, i) => (
-                    <div 
-                      key={i} 
-                      className={`p-3 rounded-lg flex items-center justify-between ${
-                        typeof ing !== 'string' && ing.from_offer 
-                          ? 'bg-emerald-50 border border-emerald-200' 
-                          : 'bg-slate-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        {typeof ing !== 'string' && ing.from_offer && (
-                          <span className="w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                            </svg>
-                          </span>
-                        )}
-                        <span className="text-slate-700">{formatIngredient(ing)}</span>
-                      </div>
-                      {typeof ing !== 'string' && ing.price > 0 && (
-                        <span className="text-emerald-600 font-medium">{ing.price.toFixed(2)} lei</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <h3 className="font-semibold text-slate-800 mb-3">Mod de preparare</h3>
-                <ol className="space-y-3">
-                  {selectedRecipe.instructions?.map((step, i) => (
-                    <li key={i} className="flex gap-3">
-                      <span className="w-6 h-6 bg-emerald-600 text-white rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
-                        {i + 1}
-                      </span>
-                      <p className="text-slate-600 pt-0.5">{step}</p>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              {selectedRecipe.tips && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                  <h4 className="font-medium text-amber-800 mb-1">Sfat util</h4>
-                  <p className="text-amber-700 text-sm">{selectedRecipe.tips}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <RecipeModal recipe={selectedRecipe} onClose={() => setSelectedRecipe(null)} />
       )}
 
-      <footer className="bg-slate-900 text-white py-8">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <h3 className="text-lg font-semibold mb-2">Chef Anti-Inflație</h3>
-          <p className="text-slate-400 text-sm">
-            Rețete generate automat din ofertele reale din supermarketuri
-          </p>
-          <p className="text-slate-500 text-xs mt-4">
-            Prețuri actualizate zilnic • Momentan: Lidl România • În curând: Kaufland, Carrefour, Mega Image
-          </p>
+      <footer className="bg-slate-900 text-white py-6 mt-10">
+        <div className="max-w-6xl mx-auto px-4 text-center">
+          <h3 className="font-semibold mb-1">Chef Anti-Inflație</h3>
+          <p className="text-slate-400 text-sm">Rețete generate automat din ofertele din supermarketuri</p>
+          <p className="text-slate-500 text-xs mt-3">Lidl România | Kaufland, Carrefour, Mega Image - în curând</p>
         </div>
       </footer>
     </main>
   )
 }
 
-function RecipeCard({ recipe, imageUrl, onClick }: { recipe: Recipe; imageUrl: string; onClick: () => void }) {
+function RecipeCard({ recipe, image, onClick }: { recipe: Recipe; image: string; onClick: () => void }) {
   return (
-    <div 
-      onClick={onClick} 
-      className="bg-white rounded-2xl overflow-hidden cursor-pointer transition-all hover:shadow-lg border border-slate-100 group"
-    >
-      <div className="relative h-44 bg-slate-200 overflow-hidden">
-        <img 
-          src={imageUrl} 
-          alt={recipe.name} 
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+    <div onClick={onClick} className="bg-white rounded-xl overflow-hidden cursor-pointer hover:shadow-md transition-shadow border border-slate-100">
+      <div className="relative h-40 bg-slate-200">
+        <img src={image} alt="" className="w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
         <div className="absolute bottom-3 left-3 right-3 text-white">
-          <h3 className="font-semibold text-lg leading-tight">{recipe.name}</h3>
+          <h3 className="font-semibold leading-tight">{recipe.name}</h3>
         </div>
       </div>
       <div className="p-4">
-        <p className="text-slate-500 text-sm mb-4 line-clamp-2">{recipe.description}</p>
-        
-        <div className="flex items-center gap-4 text-sm text-slate-600 mb-4">
-          <span className="flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            {recipe.prep_time}
-          </span>
-          <span className="flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-            {recipe.servings} porții
-          </span>
-          <span className="flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-            </svg>
-            {recipe.nutrition?.calories} kcal
-          </span>
+        <p className="text-slate-500 text-sm mb-3 line-clamp-2">{recipe.description}</p>
+        <div className="flex items-center gap-3 text-xs text-slate-500 mb-3">
+          <span>{recipe.prep_time}</span>
+          <span>{recipe.servings} porții</span>
+          <span>{recipe.nutrition?.calories} kcal</span>
         </div>
-        
         <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-          <div>
-            <span className="text-2xl font-bold text-emerald-600">{recipe.estimated_cost?.toFixed(0) || 0} lei</span>
-            {recipe.cost_per_serving && (
-              <span className="text-slate-400 text-sm ml-2">({recipe.cost_per_serving.toFixed(2)}/porție)</span>
-            )}
+          <span className="text-xl font-bold text-emerald-600">{recipe.estimated_cost?.toFixed(0)} lei</span>
+          <span className="text-emerald-600 text-sm font-medium">Vezi rețeta →</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RecipeModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void }) {
+  const formatIngredient = (ing: Ingredient | string) => {
+    if (typeof ing === 'string') return ing
+    return `${ing.name} - ${ing.quantity}`
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="relative h-48 bg-slate-200">
+          <img src={recipe.image_url || IMAGES[recipe.id % IMAGES.length]} alt="" className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+          <button onClick={onClose} className="absolute top-3 right-3 w-8 h-8 bg-black/30 hover:bg-black/50 rounded-full flex items-center justify-center text-white">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <div className="absolute bottom-3 left-4 right-4 text-white">
+            <h2 className="text-xl font-bold">{recipe.name}</h2>
+            <p className="text-white/80 text-sm">{recipe.description}</p>
           </div>
-          <span className="text-emerald-600 font-medium text-sm">Vezi rețeta →</span>
+        </div>
+
+        <div className="p-5">
+          <div className="grid grid-cols-4 gap-2 mb-5">
+            <div className="bg-emerald-50 rounded-lg p-2 text-center">
+              <p className="text-lg font-bold text-emerald-600">{recipe.estimated_cost?.toFixed(0)}</p>
+              <p className="text-xs text-slate-500">lei</p>
+            </div>
+            <div className="bg-orange-50 rounded-lg p-2 text-center">
+              <p className="text-lg font-bold text-orange-600">{recipe.nutrition?.calories}</p>
+              <p className="text-xs text-slate-500">kcal</p>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-2 text-center">
+              <p className="text-lg font-bold text-blue-600">{recipe.nutrition?.protein}g</p>
+              <p className="text-xs text-slate-500">proteine</p>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-2 text-center">
+              <p className="text-lg font-bold text-purple-600">{recipe.servings}</p>
+              <p className="text-xs text-slate-500">porții</p>
+            </div>
+          </div>
+
+          <div className="mb-5">
+            <h3 className="font-semibold text-slate-800 mb-2">Ingrediente</h3>
+            <div className="space-y-1.5">
+              {recipe.ingredients?.map((ing, i) => (
+                <div key={i} className={`p-2.5 rounded-lg flex items-center justify-between ${
+                  typeof ing !== 'string' && ing.from_offer ? 'bg-emerald-50' : 'bg-slate-50'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    {typeof ing !== 'string' && ing.from_offer && (
+                      <span className="w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
+                        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </span>
+                    )}
+                    <span className="text-sm text-slate-700">{formatIngredient(ing)}</span>
+                  </div>
+                  {typeof ing !== 'string' && ing.price > 0 && (
+                    <span className="text-sm text-emerald-600 font-medium">{ing.price.toFixed(2)} lei</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-5">
+            <h3 className="font-semibold text-slate-800 mb-2">Preparare</h3>
+            <ol className="space-y-2">
+              {recipe.instructions?.map((step, i) => (
+                <li key={i} className="flex gap-2.5 text-sm">
+                  <span className="w-5 h-5 bg-emerald-600 text-white rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
+                    {i + 1}
+                  </span>
+                  <p className="text-slate-600">{step}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          {recipe.tips && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <h4 className="font-medium text-amber-800 text-sm mb-0.5">Sfat</h4>
+              <p className="text-amber-700 text-sm">{recipe.tips}</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

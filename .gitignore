@@ -37,3 +37,4 @@ logs/
 .git/
 .gitignore
 backend/.env
+backend/.env

@@ -1,245 +1,261 @@
 {
   "top_recipes": [
     {
-      "name": "Țelină și Pește la Cuptor",
-      "description": "Pește delicios cu țelină",
+      "name": "Ciorbă de legume",
+      "description": "O ciorbă delicioasă și sănătoasă cu legume proaspete",
       "ingredients": [
+        {
+          "name": "Ceapă galbenă",
+          "quantity": "1 kg",
+          "price": 4.99,
+          "from_offer": true
+        },
+        {
+          "name": "Morcovi proaspeți",
+          "quantity": "500g",
+          "price": 2.25,
+          "from_offer": true
+        },
         {
           "name": "Țelină",
-          "quantity": "1 kg",
-          "price": 2.99,
-          "from_offer": true
-        },
-        {
-          "name": "Șprot",
-          "quantity": "800 g",
-          "price": 7.99,
+          "quantity": "500g",
+          "price": 1.5,
           "from_offer": true
         },
         {
           "name": "Ulei",
-          "quantity": "2 linguri",
+          "quantity": "100ml",
           "price": 1,
           "from_offer": false
         },
         {
-          "name": "Sare și piper",
-          "quantity": "după gust",
-          "price": 0.5,
+          "name": "Sare",
+          "quantity": "1 linguriță",
+          "price": 0.25,
           "from_offer": false
         },
         {
-          "name": "Ceapă",
-          "quantity": "1 buc",
-          "price": 1.5,
+          "name": "Apă Borsec",
+          "quantity": "1L",
+          "price": 2,
+          "from_offer": true
+        }
+      ],
+      "instructions": [
+        "Curăță și taie ceapa, morcovii și țelina",
+        "Încălzește uleiul într-o oală și adaugă ceapa și morcovii",
+        "Adaugă țelina și apa Borsec, apoi lasă să fiarbă",
+        "Adaugă sare după gust",
+        "Servește cald"
+      ],
+      "prep_time": "20 min",
+      "cook_time": "30 min",
+      "servings": 4,
+      "estimated_cost": 10.94,
+      "cost_per_serving": 2.74,
+      "difficulty": "ușor",
+      "nutrition": {
+        "calories": 100,
+        "protein": 2,
+        "carbs": 20,
+        "fat": 2
+      },
+      "tags": [
+        "ciorbă",
+        "legume"
+      ],
+      "tips": "Poți adăuga și alte legume după gust",
+      "id": 1,
+      "image_url": "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400",
+      "generated_at": "2025-12-15T23:45:53.841057"
+    },
+    {
+      "name": "Salată de roșii și castraveți",
+      "description": "O salată proaspătă și răcoritoare",
+      "ingredients": [
+        {
+          "name": "Roșii românești",
+          "quantity": "500g",
+          "price": 4.5,
+          "from_offer": true
+        },
+        {
+          "name": "Castraveți românești",
+          "quantity": "500g",
+          "price": 3,
+          "from_offer": true
+        },
+        {
+          "name": "Ceapă galbenă",
+          "quantity": "250g",
+          "price": 1.25,
+          "from_offer": true
+        },
+        {
+          "name": "Ulei",
+          "quantity": "100ml",
+          "price": 1,
+          "from_offer": false
+        },
+        {
+          "name": "Sare",
+          "quantity": "1 linguriță",
+          "price": 0.25,
           "from_offer": false
         }
       ],
       "instructions": [
-        "Preîncălziți cuptorul la 180°C.",
-        "Spălați și curățați țelina, tăiați-o în bucăți.",
-        "Așezați șprotul pe o tavă, adăugați țelina și ceapa.",
-        "Stropiți cu ulei și condimentați cu sare și piper.",
-        "Coaceți pentru 20-25 minute."
+        "Curăță și taie roșiile, castraveții și ceapa",
+        "Amestecă toate ingredientele într-un bol",
+        "Adaugă ulei și sare după gust",
+        "Servește imediat",
+        "Poți adăuga și alte ingrediente după gust"
       ],
       "prep_time": "15 min",
-      "cook_time": "25 min",
-      "servings": 4,
-      "estimated_cost": 12.48,
-      "cost_per_serving": 3.12,
-      "difficulty": "ușor",
-      "nutrition": {
-        "calories": 250,
-        "protein": 30,
-        "carbs": 10,
-        "fat": 10,
-        "fiber": 5
-      },
-      "tags": [
-        "pește",
-        "țelină"
-      ],
-      "tips": "Serviți cu o salată de legume proaspete.",
-      "id": 1,
-      "image_url": "https://images.unsplash.com/photo-1466637574441-749b8f19452f?w=400",
-      "generated_at": "2025-12-14T18:48:16.315445"
-    },
-    {
-      "name": "Salată de Fructe",
-      "description": "Salată de fructe proaspete",
-      "ingredients": [
-        {
-          "name": "Pere roșii",
-          "quantity": "1 kg",
-          "price": 8.99,
-          "from_offer": true
-        },
-        {
-          "name": "Mere golden",
-          "quantity": "1 kg",
-          "price": 3.99,
-          "from_offer": true
-        },
-        {
-          "name": "Zahăr",
-          "quantity": "2 linguri",
-          "price": 1,
-          "from_offer": false
-        }
-      ],
-      "instructions": [
-        "Spălați și curățați fructele.",
-        "Tăiați perele și merele în bucăți.",
-        "Amestecați ingredientele într-un bol.",
-        "Adăugați zahăr după gust.",
-        "Serviți imediat."
-      ],
-      "prep_time": "10 min",
       "cook_time": "0 min",
       "servings": 4,
-      "estimated_cost": 12.98,
-      "cost_per_serving": 3.24,
+      "estimated_cost": 9.75,
+      "cost_per_serving": 2.44,
       "difficulty": "ușor",
       "nutrition": {
-        "calories": 150,
+        "calories": 50,
         "protein": 2,
-        "carbs": 35,
-        "fat": 0,
-        "fiber": 5
+        "carbs": 10,
+        "fat": 0
       },
       "tags": [
-        "fructe"
+        "salată",
+        "roșii"
       ],
-      "tips": "Puteți adăuga și alte fructe după gust.",
+      "tips": "Poți adăuga și brânză sau ouă pentru o salată mai consistentă",
       "id": 2,
       "image_url": "https://images.unsplash.com/photo-1466637574441-749b8f19452f?w=400",
-      "generated_at": "2025-12-14T18:48:16.315462"
+      "generated_at": "2025-12-15T23:45:53.841072"
     },
     {
-      "name": "Cârnații Silezia la Cuptor",
-      "description": "Cârnații delicioși la cuptor",
+      "name": "Tort de mere",
+      "description": "Un desert delicios și sănătos",
       "ingredients": [
         {
-          "name": "Pikok Cârnați Silezia",
-          "quantity": "550 g",
-          "price": 13.99,
+          "name": "Mere Golden",
+          "quantity": "500g",
+          "price": 2.5,
+          "from_offer": true
+        },
+        {
+          "name": "Făină albă 000",
+          "quantity": "250g",
+          "price": 1.5,
           "from_offer": true
         },
         {
           "name": "Ulei",
-          "quantity": "1 lingură",
-          "price": 0.5,
+          "quantity": "100ml",
+          "price": 1,
           "from_offer": false
         },
         {
-          "name": "Sare și piper",
-          "quantity": "după gust",
-          "price": 0.5,
+          "name": "Ouă",
+          "quantity": "2 buc",
+          "price": 4,
           "from_offer": false
         },
         {
-          "name": "Ceapă",
-          "quantity": "1 buc",
-          "price": 1.5,
+          "name": "Sare",
+          "quantity": "1 linguriță",
+          "price": 0.25,
           "from_offer": false
         }
       ],
       "instructions": [
-        "Preîncălziți cuptorul la 180°C.",
-        "Așezați cârnații pe o tavă.",
-        "Stropiți cu ulei și adăugați ceapa.",
-        "Condimentați cu sare și piper.",
-        "Coaceți pentru 20-25 minute."
+        "Curăță și taie merele",
+        "Amestecă făina, uleiul, ouăle și sarea într-un bol",
+        "Adaugă merele și amestecă bine",
+        "Întinde aluatul într-o tavă",
+        "Coace la cuptor până este gata"
       ],
-      "prep_time": "10 min",
-      "cook_time": "25 min",
+      "prep_time": "20 min",
+      "cook_time": "30 min",
       "servings": 4,
-      "estimated_cost": 16.48,
-      "cost_per_serving": 4.12,
-      "difficulty": "ușor",
+      "estimated_cost": 9.25,
+      "cost_per_serving": 2.31,
+      "difficulty": "mediu",
       "nutrition": {
-        "calories": 300,
-        "protein": 20,
-        "carbs": 10,
-        "fat": 20,
-        "fiber": 0
+        "calories": 200,
+        "protein": 4,
+        "carbs": 30,
+        "fat": 10
       },
       "tags": [
-        "cârnați"
+        "tort",
+        "mere"
       ],
-      "tips": "Serviți cu o salată de legume proaspete.",
+      "tips": "Poți adăuga și alte ingrediente după gust, cum ar fi ciocolată sau nuci",
       "id": 3,
       "image_url": "https://images.unsplash.com/photo-1466637574441-749b8f19452f?w=400",
-      "generated_at": "2025-12-14T18:48:16.315470"
+      "generated_at": "2025-12-15T23:45:53.841076"
     }
   ],
   "cheapest_recipes": [
     {
-      "name": "Tocăniță de porc",
-      "description": "Mâncare sățioasă",
+      "name": "Piftie cu slănină și ceapă",
+      "description": "Un fel de mâncare tradițional românesc, preparat cu piftie și slănină, servit cu ceapă și pâine",
       "ingredients": [
         {
-          "name": "Carne porc, lucru",
+          "name": "Amestec piftie",
           "quantity": "200g",
-          "price": 3.58,
+          "price": 1.98,
           "from_offer": true
         },
         {
           "name": "Slănină tare de porc",
-          "quantity": "100g",
-          "price": 1.49,
+          "quantity": "200g",
+          "price": 2.98,
           "from_offer": true
         },
         {
           "name": "Ceapă",
           "quantity": "1 buc",
-          "price": 1.5,
-          "from_offer": false
-        },
-        {
-          "name": "Usturoi",
-          "quantity": "2 căței",
-          "price": 1,
+          "price": 2,
           "from_offer": false
         },
         {
           "name": "Ulei",
-          "quantity": "50ml",
-          "price": 1.5,
+          "quantity": "1 lingură",
+          "price": 0.75,
           "from_offer": false
         }
       ],
       "instructions": [
-        "Tăiați carnea și slănina în bucăți mici",
-        "Încălziți uleiul într-o tigaie",
-        "Adăugați ceapă și usturoi",
-        "Adăugați carnea și slănina",
-        "Gătiți până când carnea este gătită"
+        "Încălzește uleiul într-o tigaie",
+        "Adaugă ceapa și s-o călești până devine aurie",
+        "Adaugă amestecul de piftie și slănină",
+        "Amestecă totul și lasă la foc mic pentru 10 minute",
+        "Servire cu pâine"
       ],
-      "prep_time": "15 min",
-      "cook_time": "30 min",
+      "prep_time": "10 min",
+      "cook_time": "15 min",
       "servings": 4,
-      "estimated_cost": 8.07,
-      "cost_per_serving": 2.02,
+      "estimated_cost": 7.71,
+      "cost_per_serving": 1.93,
       "difficulty": "ușor",
       "nutrition": {
-        "calories": 350,
-        "protein": 25,
+        "calories": 250,
+        "protein": 20,
         "carbs": 10,
-        "fat": 20,
-        "fiber": 2
+        "fat": 15
       },
       "tags": [
-        "tocăniță"
+        "mâncare tradițională"
       ],
-      "tips": "Serviți cu mămăligă sau cartofi",
+      "tips": "Poftă bună!",
       "id": 1,
-      "image_url": "https://images.unsplash.com/photo-1432139555190-58524dae6a55?w=400",
-      "generated_at": "2025-12-14T18:48:18.735653"
+      "image_url": "https://images.unsplash.com/photo-1466637574441-749b8f19452f?w=400",
+      "generated_at": "2025-12-15T23:45:56.821796"
     },
     {
-      "name": "Pulpă de porc la cuptor",
-      "description": "Friptură delicioasă",
+      "name": "Paste cu sos de pulpă de porc",
+      "description": "Un fel de mâncare gustos și sățios, preparat cu paste și pulpă de porc",
       "ingredients": [
         {
           "name": "Pulpă de porc, fără os",
@@ -248,103 +264,101 @@
           "from_offer": true
         },
         {
-          "name": "Slănină tare de porc",
-          "quantity": "100g",
-          "price": 1.49,
+          "name": "Paste Alfabet cu 20% ouă",
+          "quantity": "200g",
+          "price": 1.99,
           "from_offer": true
         },
         {
-          "name": "Usturoi",
-          "quantity": "2 căței",
-          "price": 1,
+          "name": "Ulei",
+          "quantity": "1 lingură",
+          "price": 0.75,
           "from_offer": false
         },
         {
-          "name": "Ulei",
-          "quantity": "50ml",
-          "price": 1.5,
+          "name": "Sare",
+          "quantity": "1 linguriță",
+          "price": 0.25,
           "from_offer": false
         }
       ],
       "instructions": [
-        "Tăiați pulpă de porc în bucăți",
-        "Încălziți uleiul într-o tigaie",
-        "Adăugați usturoi",
-        "Adăugați pulpă de porc",
-        "Puneți la cuptor"
+        "Fierbe pastele în apă cu sare",
+        "Prăjește pulpa de porc în ulei",
+        "Amestecă pastele cu pulpa de porc",
+        "Servire caldă",
+        "Poți adăuga și smântână sau ouă bătute"
       ],
-      "prep_time": "10 min",
-      "cook_time": "40 min",
+      "prep_time": "15 min",
+      "cook_time": "20 min",
       "servings": 4,
-      "estimated_cost": 6.87,
-      "cost_per_serving": 1.72,
-      "difficulty": "ușor",
+      "estimated_cost": 6.37,
+      "cost_per_serving": 1.59,
+      "difficulty": "mediu",
       "nutrition": {
-        "calories": 300,
+        "calories": 350,
         "protein": 30,
-        "carbs": 0,
-        "fat": 15,
-        "fiber": 0
+        "carbs": 40,
+        "fat": 20
       },
       "tags": [
-        "pulpă de porc"
+        "mâncare sățioasă"
       ],
-      "tips": "Serviți cu cartofi și legume",
+      "tips": "Poți adăuga și legume sau ciuperci",
       "id": 2,
       "image_url": "https://images.unsplash.com/photo-1432139555190-58524dae6a55?w=400",
-      "generated_at": "2025-12-14T18:48:18.735663"
+      "generated_at": "2025-12-15T23:45:56.821808"
     },
     {
-      "name": "Aripi de pui la cuptor",
-      "description": "Aripioare delicioase",
+      "name": "Budincă cu croissant",
+      "description": "Un desert delicios și ușor de preparat, cu budincă și croissant",
       "ingredients": [
         {
-          "name": "La Provincia Aripi de pui",
+          "name": "Budincă",
           "quantity": "200g",
-          "price": 3.38,
+          "price": 1.89,
           "from_offer": true
         },
         {
-          "name": "Usturoi",
-          "quantity": "2 căței",
-          "price": 1,
-          "from_offer": false
+          "name": "Croissant cu 24% unt",
+          "quantity": "2 buc",
+          "price": 2.58,
+          "from_offer": true
         },
         {
           "name": "Ulei",
-          "quantity": "50ml",
-          "price": 1.5,
+          "quantity": "1 lingură",
+          "price": 0.75,
           "from_offer": false
         }
       ],
       "instructions": [
-        "Tăiați aripioarele în bucăți",
-        "Încălziți uleiul într-o tigaie",
-        "Adăugați usturoi",
-        "Adăugați aripioarele",
-        "Puneți la cuptor"
+        "Încălzește uleiul într-o tigaie",
+        "Prăjește croissantul până devine aurie",
+        "Servire cu budincă",
+        "Poți adăuga și fructe sau ciocolată",
+        "Bună poftă!"
       ],
-      "prep_time": "10 min",
-      "cook_time": "30 min",
-      "servings": 4,
-      "estimated_cost": 5.88,
-      "cost_per_serving": 1.47,
+      "prep_time": "5 min",
+      "cook_time": "5 min",
+      "servings": 2,
+      "estimated_cost": 5.22,
+      "cost_per_serving": 2.61,
       "difficulty": "ușor",
       "nutrition": {
-        "calories": 250,
-        "protein": 20,
-        "carbs": 0,
-        "fat": 10,
-        "fiber": 0
+        "calories": 200,
+        "protein": 10,
+        "carbs": 30,
+        "fat": 10
       },
       "tags": [
-        "aripioare de pui"
+        "desert"
       ],
-      "tips": "Serviți cu cartofi și legume",
+      "tips": "Poți adăuga și înghețată sau frișcă",
       "id": 3,
-      "image_url": "https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=400",
-      "generated_at": "2025-12-14T18:48:18.735665"
+      "image_url": "https://images.unsplash.com/photo-1466637574441-749b8f19452f?w=400",
+      "generated_at": "2025-12-15T23:45:56.821813"
     }
   ],
-  "last_updated": "2025-12-14T18:48:18.735682"
+  "last_updated": "2025-12-15T23:45:56.821828"
 }

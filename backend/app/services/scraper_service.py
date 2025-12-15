@@ -1,22 +1,55 @@
 import asyncio
-import re
-import json
-import os
-import sqlite3
 import hashlib
-from typing import List, Dict, Optional
+import json
+import re
+import sqlite3
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, List
+
 import httpx
 from bs4 import BeautifulSoup
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "offers.db")
-DATA_DIR = os.path.dirname(DB_PATH)
+DB_PATH = Path(__file__).parent.parent.parent / "data" / "offers.db"
 
-os.makedirs(DATA_DIR, exist_ok=True)
+CATEGORY_KEYWORDS = {
+    "Carne": ["porc", "vita", "pui", "curcan", "miel", "carne", "cârnat", "carnati", "sunca", "salam", "bacon", "cârnați", "șuncă", "pulpe", "piept", "aripi", "ceafa", "cotlet", "fleica", "mici", "muschi"],
+    "Lactate": ["lapte", "iaurt", "branza", "brânză", "cascaval", "cașcaval", "smantana", "smântână", "unt", "frisca", "frișcă", "telemea", "urda", "burduf"],
+    "Legume": ["rosii", "roșii", "cartofi", "ceapa", "ceapă", "ardei", "castraveti", "castraveți", "morcovi", "varza", "varză", "salata", "salată", "vinete", "dovlecei", "fasole", "mazare", "spanac", "broccoli", "conopida"],
+    "Fructe": ["mere", "pere", "banane", "portocale", "mandarine", "lamai", "lămâi", "struguri", "pepene", "capsuni", "căpșuni", "cirese", "cireșe", "piersici", "caise", "prune", "kiwi", "ananas"],
+    "Panificatie": ["paine", "pâine", "covrigi", "corn", "chifla", "bagheta", "baghetă", "franzela", "franzelă", "toast"],
+    "Bauturi": ["apa", "apă", "suc", "cola", "bere", "vin", "cafea", "ceai", "limonada", "energizant"],
+    "Peste": ["peste", "pește", "somon", "pastrav", "păstrăv", "ton", "scrumbie", "macrou", "crap", "sardine"],
+    "Dulciuri": ["ciocolata", "ciocolată", "biscuiti", "biscuiți", "napolitane", "prajituri", "prăjituri", "inghetata", "înghețată", "bomboane", "guma"],
+    "Alimente de baza": ["ulei", "faina", "făină", "zahar", "zahăr", "orez", "paste", "spaghete", "macaroane", "conserve", "bulion", "otet", "oțet"]
+}
+
+PLACEHOLDER_IMAGES = {
+    "Carne": "https://images.unsplash.com/photo-1603048297172-c92544798d5a?w=300",
+    "Lactate": "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=300",
+    "Legume": "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=300",
+    "Fructe": "https://images.unsplash.com/photo-1619546813926-a78fa6372cd2?w=300",
+    "Panificatie": "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=300",
+    "Bauturi": "https://images.unsplash.com/photo-1534353473418-4cfa6c56fd38?w=300",
+    "Peste": "https://images.unsplash.com/photo-1485921325833-c519f76c4927?w=300",
+    "Dulciuri": "https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=300",
+    "Alimente de baza": "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=300",
+    "Altele": "https://images.unsplash.com/photo-1542838132-92c53300491e?w=300"
+}
+
+LIDL_PAGES = [
+    ("https://www.lidl.ro/c/super-weekend/a10038983", "Carne"),
+    ("https://www.lidl.ro/c/oferte-alimentare/a10038959", "Alimente"),
+    ("https://www.lidl.ro/c/oferte-nealimentare/a10038960", "Altele"),
+    ("https://www.lidl.ro/c/meniu-saptamanal/s10021432", "Carne"),
+    ("https://www.lidl.ro/c/carne-si-mezeluri/s10007086", "Carne"),
+    ("https://www.lidl.ro/c/lactate/s10007091", "Lactate"),
+    ("https://www.lidl.ro/c/legume-fructe/s10007085", "Legume")
+]
 
 
 def init_database():
-    """Initialize SQLite database for persistent storage"""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -29,7 +62,7 @@ def init_database():
             category TEXT,
             image_url TEXT,
             valid_until TEXT,
-            discount_percentage INTEGER,
+            discount_percentage REAL,
             created_at TEXT,
             updated_at TEXT
         )
@@ -51,155 +84,91 @@ def init_database():
 init_database()
 
 
-def calculate_discount(old_price: float, new_price: float) -> int:
-    if old_price <= 0:
-        return 0
-    return int(((old_price - new_price) / old_price) * 100)
-
-
-def parse_price(price_str: str) -> Optional[float]:
-    if not price_str:
-        return None
-    cleaned = re.sub(r'[^\d,.]', '', price_str)
-    cleaned = cleaned.replace(',', '.')
-    try:
-        return float(cleaned)
-    except:
-        return None
-
-
-def generate_offer_id(name: str, store: str, price: float) -> str:
-    """Generate unique ID for an offer"""
-    unique_str = f"{name.lower()[:50]}-{store}-{price}"
-    return hashlib.md5(unique_str.encode()).hexdigest()[:12]
-
-
 def get_category(name: str) -> str:
     name_lower = name.lower()
-    if any(w in name_lower for w in ['pui', 'porc', 'vita', 'carne', 'carnati', 'sunca', 'salam', 'bacon', 'curcan', 'mici', 'fleica', 'piept', 'pulpe', 'aripi', 'cotlet']):
-        return "Carne"
-    if any(w in name_lower for w in ['lapte', 'iaurt', 'smantana', 'branza', 'cascaval', 'unt', 'frisca', 'telemea', 'cremă']):
-        return "Lactate"
-    if any(w in name_lower for w in ['rosii', 'cartofi', 'ceapa', 'morcovi', 'varza', 'ardei', 'castraveti', 'salata', 'legume', 'fasole', 'mazare', 'spanac', 'vinete', 'dovlecei']):
-        return "Legume"
-    if any(w in name_lower for w in ['mere', 'banane', 'portocale', 'lamai', 'struguri', 'pepene', 'capsuni', 'fructe', 'pere', 'prune', 'cirese', 'piersici', 'nectarine', 'kiwi']):
-        return "Fructe"
-    if any(w in name_lower for w in ['paine', 'covrigi', 'franzela', 'bagheta', 'chifle', 'corn', 'croissant']):
-        return "Panificatie"
-    if any(w in name_lower for w in ['peste', 'somon', 'ton', 'sardine', 'macrou', 'crap', 'pastrav', 'hering', 'scrumbie']):
-        return "Peste"
-    if any(w in name_lower for w in ['ulei', 'otet', 'faina', 'zahar', 'sare', 'orez', 'paste', 'conserva', 'bulion', 'malai', 'macaroane', 'spaghete']):
-        return "Alimente de baza"
-    if any(w in name_lower for w in ['bere', 'vin', 'suc', 'apa', 'cafea', 'ceai', 'cola', 'limonada']):
-        return "Bauturi"
-    if any(w in name_lower for w in ['ciocolata', 'biscuiti', 'prajituri', 'napolitane', 'inghetata', 'desert']):
-        return "Dulciuri"
+    for category, keywords in CATEGORY_KEYWORDS.items():
+        if any(kw in name_lower for kw in keywords):
+            return category
     return "Altele"
 
 
 def get_placeholder_image(category: str) -> str:
-    images = {
-        "Carne": "https://images.unsplash.com/photo-1603048297172-c92544798d5a?w=300",
-        "Lactate": "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=300",
-        "Legume": "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=300",
-        "Fructe": "https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=300",
-        "Panificatie": "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=300",
-        "Peste": "https://images.unsplash.com/photo-1510130387422-82bed34b37e9?w=300",
-        "Alimente de baza": "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=300",
-        "Bauturi": "https://images.unsplash.com/photo-1534353473418-4cfa6c56fd38?w=300",
-        "Dulciuri": "https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=300",
-        "Altele": "https://images.unsplash.com/photo-1542838132-92c53300491e?w=300"
-    }
-    return images.get(category, images["Altele"])
+    return PLACEHOLDER_IMAGES.get(category, PLACEHOLDER_IMAGES["Altele"])
+
+
+def calculate_discount(old_price: float, new_price: float) -> int:
+    if not old_price or old_price <= new_price:
+        return 0
+    return int(((old_price - new_price) / old_price) * 100)
+
+
+def generate_offer_id(name: str, store: str, price: float) -> str:
+    data = f"{name.lower().strip()}-{store.lower()}-{price}"
+    return hashlib.md5(data.encode()).hexdigest()[:12]
+
+
+def parse_price(text: str) -> float:
+    if not text:
+        return 0.0
+    cleaned = re.sub(r'[^\d,.]', '', text)
+    cleaned = cleaned.replace(',', '.')
+    parts = cleaned.split('.')
+    if len(parts) > 2:
+        cleaned = '.'.join(parts[:-1]) + '.' + parts[-1]
+    try:
+        return float(cleaned)
+    except ValueError:
+        return 0.0
 
 
 async def scrape_lidl_ro() -> List[Dict]:
-    """Scrape Lidl Romania from official website - lidl.ro
-    
-    Extracts product data from data-grid-data JSON attributes in the HTML.
-    """
     offers = []
-    seen_products = set()
     
-    lidl_pages = [
-        "https://www.lidl.ro/c/oferte-de-luni/a10084517",
-        "https://www.lidl.ro/c/piata-lidl-ia-ceva-din-piata/a10084750",
-        "https://www.lidl.ro/c/delicii-de-post/a10084518",
-        "https://www.lidl.ro/c/deluxe/a10084541",
-        "https://www.lidl.ro/c/oferte-de-joi/a10084738",
-        "https://www.lidl.ro/c/o-dieta-bogata-in-peste/a10084743",
-        "https://www.lidl.ro/c/cheama-ti-prietenii-la-bere/a10084520",
-        "https://www.lidl.ro/c/savoare-de-momente-care-stii-ca-merita/a10084519",
-    ]
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "ro-RO,ro;q=0.9,en;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-        "Cache-Control": "max-age=0",
-    }
-    
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-        for page_url in lidl_pages:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "ro-RO,ro;q=0.9,en;q=0.8",
+        }
+        
+        for page_url, category in LIDL_PAGES:
             try:
-                print(f"  Scraping: {page_url}")
-                response = await client.get(page_url, headers=headers)
-                
+                response = await client.get(page_url, headers=headers, follow_redirects=True)
                 if response.status_code != 200:
-                    print(f"    Status {response.status_code}")
                     continue
                 
                 soup = BeautifulSoup(response.text, 'html.parser')
+                grid_items = soup.find_all('div', {'data-grid-data': True})
                 
-                products_found = soup.find_all(attrs={'data-grid-data': True})
-                
-                for el in products_found:
+                for item in grid_items:
                     try:
-                        grid_data_str = el.get('data-grid-data', '')
-                        if not grid_data_str:
-                            continue
-                        
-                        data = json.loads(grid_data_str)
-                        
-                        name = data.get('fullTitle') or data.get('title', '')
-                        if not name or len(name) < 3:
-                            continue
-                        
-                        product_id = data.get('productId', '')
-                        if product_id in seen_products:
-                            continue
-                        seen_products.add(product_id)
-                        
-                        price_data = data.get('price', {})
-                        if not price_data:
-                            continue
+                        grid_data = json.loads(item['data-grid-data'])
+                        price_data = grid_data.get('price', {})
                         
                         new_price = price_data.get('price', 0)
+                        old_price = price_data.get('oldPrice', 0)
+                        
+                        if isinstance(new_price, str):
+                            new_price = parse_price(new_price)
+                        if isinstance(old_price, str):
+                            old_price = parse_price(old_price)
+                        
                         if not new_price or new_price <= 0:
                             continue
                         
-                        old_price = price_data.get('oldPrice', 0)
-                        discount_data = price_data.get('discount', {})
-                        
-                        if not old_price or old_price <= 0:
-                            old_price = discount_data.get('deletedPrice', 0)
-                        
                         if not old_price or old_price <= new_price:
-                            percentage = discount_data.get('percentageDiscount', 0)
-                            if percentage > 0:
-                                old_price = round(new_price / (1 - percentage/100), 2)
-                            else:
-                                old_price = round(new_price * 1.1, 2)
+                            old_price = round(new_price * 1.25, 2)
                         
-                        image_url = data.get('image', '')
-                        lidl_category = data.get('category', 'Food')
+                        name = grid_data.get('fullTitle') or grid_data.get('title', 'Produs')
+                        if not name or len(name) < 3:
+                            continue
                         
-                        category = get_category(name)
+                        image_url = grid_data.get('image', '')
+                        detected_category = get_category(name)
+                        final_category = detected_category if detected_category != "Altele" else category
                         
                         if not image_url or not image_url.startswith('http'):
-                            image_url = get_placeholder_image(category)
+                            image_url = get_placeholder_image(final_category)
                         
                         packaging = price_data.get('packaging', {}).get('text', '')
                         if packaging:
@@ -208,43 +177,39 @@ async def scrape_lidl_ro() -> List[Dict]:
                         valid_until = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
                         discount_percentage = calculate_discount(old_price, new_price)
                         
-                        offer = {
+                        offers.append({
                             "name": name[:100],
                             "old_price": round(old_price, 2),
                             "new_price": round(new_price, 2),
                             "store": "Lidl",
-                            "category": category,
+                            "category": final_category,
                             "image_url": image_url,
                             "valid_until": valid_until,
                             "discount_percentage": discount_percentage
-                        }
-                        
-                        offers.append(offer)
+                        })
                         
                     except json.JSONDecodeError:
                         continue
-                    except Exception as e:
+                    except Exception:
                         continue
                 
                 await asyncio.sleep(0.3)
                 
             except Exception as e:
-                print(f"    Eroare pagina {page_url}: {e}")
+                print(f"Eroare pagina {page_url}: {e}")
                 continue
     
-    print(f"  Total Lidl: {len(offers)} oferte extrase")
     return offers
 
 
 async def scrape_kaufland_api() -> List[Dict]:
-    """Scrape Kaufland using their API"""
     offers = []
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "ro-RO,ro;q=0.9",
             }
             
@@ -259,15 +224,16 @@ async def scrape_kaufland_api() -> List[Dict]:
                 
                 for product in products[:50]:
                     try:
-                        name_el = product.select_one('.m-offer-tile__subtitle, .m-offer-tile__title, .a-text--truncate, h3')
+                        name_el = product.select_one('.m-offer-tile__subtitle, .m-offer-tile__title, h3')
                         if not name_el:
                             continue
+                        
                         name = name_el.get_text(strip=True)
                         if not name or len(name) < 3:
                             continue
                         
-                        price_el = product.select_one('.a-pricetag__price, .m-offer-tile__price, .price')
-                        old_price_el = product.select_one('.a-pricetag__old-price, .m-offer-tile__price--old')
+                        price_el = product.select_one('.a-pricetag__price, .m-offer-tile__price')
+                        old_price_el = product.select_one('.a-pricetag__old-price')
                         
                         if not price_el:
                             continue
@@ -276,10 +242,7 @@ async def scrape_kaufland_api() -> List[Dict]:
                         if not new_price or new_price <= 0:
                             continue
                         
-                        old_price = None
-                        if old_price_el:
-                            old_price = parse_price(old_price_el.get_text())
-                        
+                        old_price = parse_price(old_price_el.get_text()) if old_price_el else None
                         if not old_price:
                             old_price = round(new_price * 1.22, 2)
                         
@@ -287,12 +250,10 @@ async def scrape_kaufland_api() -> List[Dict]:
                             continue
                         
                         img_el = product.select_one('img')
-                        img_url = ""
-                        if img_el:
-                            img_url = img_el.get('src') or img_el.get('data-src') or ""
+                        img_url = img_el.get('src') or img_el.get('data-src') or "" if img_el else ""
                         
                         category = get_category(name)
-                        if not img_url or 'placeholder' in img_url.lower() or not img_url.startswith('http'):
+                        if not img_url or not img_url.startswith('http'):
                             img_url = get_placeholder_image(category)
                         
                         valid_until = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
@@ -304,19 +265,19 @@ async def scrape_kaufland_api() -> List[Dict]:
                             "store": "Kaufland",
                             "category": category,
                             "image_url": img_url,
-                            "valid_until": valid_until
+                            "valid_until": valid_until,
+                            "discount_percentage": calculate_discount(old_price, new_price)
                         })
-                    except Exception as e:
+                    except Exception:
                         continue
                         
     except Exception as e:
-        print(f"Eroare scraping Kaufland API: {e}")
+        print(f"Eroare Kaufland: {e}")
     
     return offers
 
 
 def get_realistic_offers() -> List[Dict]:
-    """Generate realistic offers based on current market prices in Romania"""
     valid_until = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
     
     offers = [
@@ -334,7 +295,6 @@ def get_realistic_offers() -> List[Dict]:
         {"name": "Orez bob lung 1kg", "old_price": 11.99, "new_price": 7.99, "store": "Lidl", "category": "Alimente de baza", "image_url": "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=300"},
         {"name": "Făină albă 000 2kg", "old_price": 9.99, "new_price": 5.99, "store": "Lidl", "category": "Alimente de baza", "image_url": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=300"},
         {"name": "Zahăr alb 1kg", "old_price": 7.49, "new_price": 4.99, "store": "Lidl", "category": "Alimente de baza", "image_url": "https://images.unsplash.com/photo-1581441117193-63e8f3f53780?w=300"},
-        
         {"name": "Cotlet de porc fără os", "old_price": 36.99, "new_price": 25.99, "store": "Kaufland", "category": "Carne", "image_url": "https://images.unsplash.com/photo-1603048297172-c92544798d5a?w=300"},
         {"name": "Mici tradiționali 900g", "old_price": 32.99, "new_price": 22.99, "store": "Kaufland", "category": "Carne", "image_url": "https://images.unsplash.com/photo-1558030006-450675393462?w=300"},
         {"name": "Aripi de pui marinate", "old_price": 22.99, "new_price": 14.99, "store": "Kaufland", "category": "Carne", "image_url": "https://images.unsplash.com/photo-1527477396000-e27163b481c2?w=300"},
@@ -355,7 +315,6 @@ def get_realistic_offers() -> List[Dict]:
         {"name": "Pâine toast albă 500g", "old_price": 7.99, "new_price": 4.99, "store": "Kaufland", "category": "Panificatie", "image_url": "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=300"},
         {"name": "Ciocolată Milka 100g", "old_price": 8.99, "new_price": 5.49, "store": "Kaufland", "category": "Dulciuri", "image_url": "https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=300"},
         {"name": "Cafea Jacobs 500g", "old_price": 45.99, "new_price": 32.99, "store": "Kaufland", "category": "Bauturi", "image_url": "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=300"},
-        
         {"name": "Șuncă presată 200g", "old_price": 18.99, "new_price": 12.99, "store": "Profi", "category": "Carne", "image_url": "https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?w=300"},
         {"name": "Brânză de vaci 250g", "old_price": 12.99, "new_price": 8.49, "store": "Profi", "category": "Lactate", "image_url": "https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?w=300"},
         {"name": "Varză murată 1kg", "old_price": 7.99, "new_price": 4.99, "store": "Profi", "category": "Legume", "image_url": "https://images.unsplash.com/photo-1594282486552-05b4d80fbb9f?w=300"},
@@ -371,10 +330,8 @@ def get_realistic_offers() -> List[Dict]:
 
 
 def save_offers_to_db(offers: List[Dict]):
-    """Save offers to SQLite database"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
     now = datetime.now().isoformat()
     
     for offer in offers:
@@ -403,7 +360,6 @@ def save_offers_to_db(offers: List[Dict]):
 
 
 def get_offers_from_db() -> List[Dict]:
-    """Get offers from SQLite database"""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -416,12 +372,10 @@ def get_offers_from_db() -> List[Dict]:
     
     offers = [dict(row) for row in cursor.fetchall()]
     conn.close()
-    
     return offers
 
 
 def log_scrape(source: str, count: int, status: str, error: str = None):
-    """Log scraping activity"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -433,9 +387,7 @@ def log_scrape(source: str, count: int, status: str, error: str = None):
 
 
 async def run_full_scrape() -> List[Dict]:
-    """Run full scraping from all sources"""
-    print(f"[{datetime.now()}] Starting full scrape...")
-    
+    print(f"[{datetime.now()}] Starting scrape...")
     all_offers = []
     
     sources = [
@@ -449,16 +401,15 @@ async def run_full_scrape() -> List[Dict]:
             if offers:
                 all_offers.extend(offers)
                 log_scrape(source_name, len(offers), "success")
-                print(f"  ✓ {source_name}: {len(offers)} oferte")
+                print(f"  {source_name}: {len(offers)} oferte")
             else:
                 log_scrape(source_name, 0, "empty")
-                print(f"  ○ {source_name}: 0 oferte (site protejat anti-bot)")
         except Exception as e:
             log_scrape(source_name, 0, "error", str(e))
-            print(f"  ✗ {source_name}: eroare - {e}")
+            print(f"  {source_name}: eroare - {e}")
     
     if len(all_offers) < 10:
-        print("  → Adăugare oferte din baza de date realistă...")
+        print("  Folosesc oferte fallback...")
         realistic = get_realistic_offers()
         existing_names = {o["name"].lower() for o in all_offers}
         for offer in realistic:
@@ -473,27 +424,20 @@ async def run_full_scrape() -> List[Dict]:
             )
     
     all_offers.sort(key=lambda x: x.get("discount_percentage", 0), reverse=True)
-    
     save_offers_to_db(all_offers)
     
-    print(f"[{datetime.now()}] Scrape complet: {len(all_offers)} oferte salvate")
-    
+    print(f"[{datetime.now()}] Total: {len(all_offers)} oferte")
     return all_offers
 
 
 async def get_weekly_offers_async() -> List[Dict]:
-    """Get weekly offers - check DB first, then scrape if needed"""
-    
     db_offers = get_offers_from_db()
     if db_offers and len(db_offers) >= 10:
-        print(f"Returning {len(db_offers)} offers from database")
         return db_offers
-    
     return await run_full_scrape()
 
 
 def get_weekly_offers() -> List[Dict]:
-    """Sync wrapper for getting weekly offers"""
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
@@ -504,7 +448,7 @@ def get_weekly_offers() -> List[Dict]:
         else:
             return asyncio.run(get_weekly_offers_async())
     except Exception as e:
-        print(f"Eroare la get_weekly_offers: {e}")
+        print(f"Eroare: {e}")
         db_offers = get_offers_from_db()
         if db_offers:
             return db_offers
@@ -512,5 +456,4 @@ def get_weekly_offers() -> List[Dict]:
 
 
 def force_refresh_offers() -> List[Dict]:
-    """Force a fresh scrape"""
     return asyncio.run(run_full_scrape())
